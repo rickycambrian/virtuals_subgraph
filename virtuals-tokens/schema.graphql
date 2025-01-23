@@ -1,11 +1,11 @@
-type TokenLaunch @entity(immutable: true) {
-  id: Bytes!
-  address: String! # Changed from Bytes to String for fulltext search
-  addressBytes: Bytes! # Keep original bytes version
+type TokenLaunch @entity {
+  id: ID!
+  address: String! # The launched token address as string for search
+  addressBytes: Bytes! # The raw token address bytes
   createdAtBlock: BigInt!
   createdAtTx: Bytes!
-  tokenCreator: String! # Changed from Bytes to String for fulltext search
-  tokenCreatorBytes: Bytes! # Keep original bytes version
+  tokenCreator: String! # Creator address as string for search
+  tokenCreatorBytes: Bytes! # The raw creator address bytes
   timestamp: BigInt!
 }
 

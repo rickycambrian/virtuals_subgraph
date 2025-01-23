@@ -5,60 +5,24 @@
       {
         "indexed": true,
         "internalType": "address",
-        "name": "previousOwner",
+        "name": "token",
         "type": "address"
       },
       {
         "indexed": true,
         "internalType": "address",
-        "name": "newOwner",
+        "name": "pair",
         "type": "address"
-      }
-    ],
-    "name": "OwnershipTransferred",
-    "type": "event"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "string",
-        "name": "_name",
-        "type": "string"
       },
       {
-        "internalType": "string",
-        "name": "_ticker",
-        "type": "string"
-      },
-      {
-        "internalType": "uint8[]",
-        "name": "cores",
-        "type": "uint8[]"
-      },
-      {
-        "internalType": "string",
-        "name": "desc",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "img",
-        "type": "string"
-      },
-      {
-        "internalType": "string[4]",
-        "name": "urls",
-        "type": "string[4]"
-      },
-      {
+        "indexed": false,
         "internalType": "uint256",
-        "name": "purchaseAmount",
+        "name": "",
         "type": "uint256"
       }
     ],
-    "name": "launch",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "name": "Launched",
+    "type": "event",
+    "signature": "0x714aa39317ad9a7a7a99db52b44490da5d068a0b2710fffb1a1282ad3cadae1f"
   }
 ]

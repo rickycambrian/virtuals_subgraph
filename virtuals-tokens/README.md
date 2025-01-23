@@ -1,6 +1,6 @@
 # Virtuals Protocol Token Launch Subgraph
 
-This subgraph indexes token launches from the Virtuals Protocol on Base network. It tracks successful transactions in the TransparentUpgradeableProxy function (0x3c0b93aa) at address `0xF66DeA7b3e897cD44A5a231c61B6B4423d613259`.
+This subgraph indexes token launches from the Virtuals Protocol on Base network. It tracks the Launched events from the contract at `0xF66DeA7b3e897cD44A5a231c61B6B4423d613259`.
 
 ## Schema
 
@@ -13,6 +13,64 @@ The subgraph tracks the following data for each token launch:
 - `tokenCreator`: Address of the token creator (as string for searchability)
 - `tokenCreatorBytes`: The raw creator address bytes
 - `timestamp`: Timestamp of the creation
+
+## Endpoints
+
+- Queries (HTTP): https://api.studio.thegraph.com/query/7428/virtuals-tokens/0.3.0
+
+## Example Queries
+
+### Get Recent Token Launches
+
+```graphql
+{
+  tokenLaunches(
+    first: 5,
+    orderBy: timestamp,
+    orderDirection: desc
+  ) {
+    id
+    address
+    tokenCreator
+    createdAtBlock
+    createdAtTx
+    timestamp
+  }
+}
+```
+
+### Search by Address
+
+```graphql
+{
+  tokenLaunchSearch(
+    text: "0x..."  # Replace with address to search
+  ) {
+    id
+    address
+    tokenCreator
+    timestamp
+  }
+}
+```
+
+### Get Launches by Creator
+
+```graphql
+{
+  tokenLaunches(
+    where: {
+      tokenCreator: "0x..."  # Replace with creator address
+    }
+  ) {
+    id
+    address
+    createdAtBlock
+    createdAtTx
+    timestamp
+  }
+}
+```
 
 ## Setup & Development
 
@@ -48,7 +106,7 @@ graph auth <your-deploy-key>
 
 4. Deploy the subgraph:
 ```bash
-graph deploy --studio virtuals-tokens
+graph deploy virtuals-tokens
 ```
 
 When prompted for a version label, use semantic versioning (e.g., "0.1.0")
@@ -68,43 +126,12 @@ yarn build
 ```
 6. Deploy new version:
 ```bash
-graph deploy --studio virtuals-tokens
-```
-
-## Testing
-
-1. After deployment, you can test the subgraph by querying for token launches:
-
-```graphql
-{
-  tokenLaunches(first: 5) {
-    id
-    address
-    addressBytes
-    createdAtBlock
-    createdAtTx
-    tokenCreator
-    tokenCreatorBytes
-    timestamp
-  }
-}
-```
-
-2. You can also use the fulltext search functionality:
-
-```graphql
-{
-  tokenLaunchSearch(text: "0x...") {
-    id
-    address
-    tokenCreator
-  }
-}
+graph deploy virtuals-tokens
 ```
 
 ## Notes
 
 - The subgraph starts indexing from block 21841737
-- Only successful transactions are indexed
-- Token addresses are extracted from the OwnershipTransferred event
+- Only successful launches are indexed via the Launched event
 - Addresses are stored both as strings (for search) and bytes (for raw data)
+- The subgraph supports fulltext search on addresses
