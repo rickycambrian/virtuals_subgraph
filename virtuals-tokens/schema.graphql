@@ -1,16 +1,26 @@
-type AdminChanged @entity(immutable: true) {
+type TokenLaunch @entity(immutable: true) {
   id: Bytes!
-  previousAdmin: Bytes! # address
-  newAdmin: Bytes! # address
-  blockNumber: BigInt!
-  blockTimestamp: BigInt!
-  transactionHash: Bytes!
+  address: String! # Changed from Bytes to String for fulltext search
+  addressBytes: Bytes! # Keep original bytes version
+  createdAtBlock: BigInt!
+  createdAtTx: Bytes!
+  tokenCreator: String! # Changed from Bytes to String for fulltext search
+  tokenCreatorBytes: Bytes! # Keep original bytes version
+  timestamp: BigInt!
 }
 
-type Upgraded @entity(immutable: true) {
-  id: Bytes!
-  implementation: Bytes! # address
-  blockNumber: BigInt!
-  blockTimestamp: BigInt!
-  transactionHash: Bytes!
-}
+type _Schema_
+@fulltext(
+  name: "tokenLaunchSearch"
+  language: en
+  algorithm: rank
+  include: [
+    {
+      entity: "TokenLaunch",
+      fields: [
+        { name: "address" },
+        { name: "tokenCreator" }
+      ]
+    }
+  ]
+)

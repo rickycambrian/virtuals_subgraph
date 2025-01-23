@@ -1,29 +1,31 @@
 specVersion: 1.0.0
 indexerHints:
   prune: auto
+features:
+  - fullTextSearch
 schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum
-    name: TransparentUpgradeableProxy
+    name: VirtualsProtocol
     network: base
     source:
       address: "0xF66DeA7b3e897cD44A5a231c61B6B4423d613259"
-      abi: TransparentUpgradeableProxy
+      abi: VirtualsProtocol
       startBlock: 21841737
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
       language: wasm/assemblyscript
       entities:
-        - AdminChanged
-        - Upgraded
+        - TokenLaunch
       abis:
-        - name: TransparentUpgradeableProxy
-          file: ./abis/TransparentUpgradeableProxy.json
+        - name: VirtualsProtocol
+          file: ./abis/VirtualsProtocol.json
       eventHandlers:
-        - event: AdminChanged(address,address)
-          handler: handleAdminChanged
-        - event: Upgraded(indexed address)
-          handler: handleUpgraded
-      file: ./src/transparent-upgradeable-proxy.ts
+        - event: OwnershipTransferred(indexed address,indexed address)
+          handler: handleOwnershipTransferred
+      callHandlers:
+        - function: launch(string,string,uint8[],string,string,string[4],uint256)
+          handler: handleLaunch
+      file: ./src/virtuals-protocol.ts
