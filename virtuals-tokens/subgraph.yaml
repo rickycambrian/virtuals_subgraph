@@ -25,5 +25,7 @@ dataSources:
       eventHandlers:
         - event: Launched(indexed address,indexed address,uint256)
           handler: handleLaunched
-          topic0: "0x714aa39317ad9a7a7a99db52b44490da5d068a0b2710fffb1a1282ad3cadae1f"
+      callHandlers:
+        - function: launch(string,string,uint8[],string,string,string[4],uint256)
+          handler: handleLaunch
       file: ./src/virtuals-protocol.ts

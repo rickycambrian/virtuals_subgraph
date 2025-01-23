@@ -7,6 +7,15 @@ type TokenLaunch @entity {
   tokenCreator: String! # Creator address as string for search
   tokenCreatorBytes: Bytes! # The raw creator address bytes
   timestamp: BigInt!
+  
+  # Launch function parameters
+  name: String!
+  ticker: String!
+  cores: [Int!]!
+  description: String!
+  imageUrl: String!
+  urls: [String!]!
+  purchaseAmount: BigInt!
 }
 
 type _Schema_
@@ -19,7 +28,10 @@ type _Schema_
       entity: "TokenLaunch",
       fields: [
         { name: "address" },
-        { name: "tokenCreator" }
+        { name: "tokenCreator" },
+        { name: "name" },
+        { name: "ticker" },
+        { name: "description" }
       ]
     }
   ]

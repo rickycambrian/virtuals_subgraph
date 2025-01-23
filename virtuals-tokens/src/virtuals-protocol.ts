@@ -1,6 +1,7 @@
-import { BigInt, Bytes, log } from "@graphprotocol/graph-ts"
+import { BigInt, Bytes, log, store } from "@graphprotocol/graph-ts"
 import {
-  Launched as LaunchedEvent
+  Launched as LaunchedEvent,
+  LaunchCall
 } from "../generated/VirtualsProtocol/VirtualsProtocol"
 import { TokenLaunch } from "../generated/schema"
 
@@ -13,8 +14,7 @@ export function handleLaunched(event: LaunchedEvent): void {
   log.debug('From Address: {}', [event.transaction.from.toHexString()])
   
   // Create a unique ID using the transaction hash and log index
-  const idBytes = event.transaction.hash.concatI32(event.logIndex.toI32())
-  const id = idBytes.toHexString()
+  const id = event.transaction.hash.toHexString()
   log.info('Creating TokenLaunch entity with ID: {}', [id])
   
   let launch = new TokenLaunch(id)
@@ -29,13 +29,51 @@ export function handleLaunched(event: LaunchedEvent): void {
   launch.createdAtTx = event.transaction.hash
   launch.timestamp = event.block.timestamp
   
-  log.info('Saving TokenLaunch entity with values:', [])
-  log.info('- address: {}', [launch.address])
-  log.info('- tokenCreator: {}', [launch.tokenCreator])
-  log.info('- block: {}', [launch.createdAtBlock.toString()])
+  // Initialize arrays and strings
+  launch.cores = []
+  launch.urls = []
+  launch.name = ''
+  launch.ticker = ''
+  launch.description = ''
+  launch.imageUrl = ''
+  launch.purchaseAmount = BigInt.fromI32(0)
   
   launch.save()
   log.info('Successfully saved TokenLaunch entity with ID: {}', [id])
+}
+
+export function handleLaunch(call: LaunchCall): void {
+  // Use transaction hash as ID to match with the event
+  const id = call.transaction.hash.toHexString()
+  let launch = TokenLaunch.load(id)
   
-  log.debug('============= End Launched Event =============', [])
+  if (launch) {
+    log.info('Updating TokenLaunch entity with function parameters. ID: {}', [id])
+    
+    // Update with function parameters
+    launch.name = call.inputs._name
+    launch.ticker = call.inputs._ticker
+    launch.description = call.inputs.desc
+    launch.imageUrl = call.inputs.img
+    launch.purchaseAmount = call.inputs.purchaseAmount
+    
+    // Convert cores array
+    let coresArray = new Array<i32>()
+    for (let i = 0; i < call.inputs.cores.length; i++) {
+      coresArray.push(call.inputs.cores[i])
+    }
+    launch.cores = coresArray
+    
+    // Convert urls array
+    let urlsArray = new Array<string>()
+    for (let i = 0; i < call.inputs.urls.length; i++) {
+      urlsArray.push(call.inputs.urls[i])
+    }
+    launch.urls = urlsArray
+    
+    launch.save()
+    log.info('Successfully updated TokenLaunch with function parameters', [])
+  } else {
+    log.warning('TokenLaunch entity not found for function call. ID: {}', [id])
+  }
 }
