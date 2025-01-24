@@ -46,6 +46,28 @@ type TradeEvent @entity {
   amount1Out: BigInt
 }
 
+type DailyMetric @entity {
+  id: ID! # YYYY-MM-DD
+  date: String!
+  timestamp: BigInt!
+  
+  # Volume metrics
+  volumeToken: BigInt!
+  volumeUSD: BigDecimal!
+  
+  # Market metrics
+  marketCapUSD: BigDecimal!
+  priceUSD: BigDecimal!
+  
+  # Token address this metric is for
+  tokenAddress: String!
+  tokenAddressBytes: Bytes!
+  
+  # Trade counts
+  swapCount: BigInt!
+  transferCount: BigInt!
+}
+
 type _Schema_
 @fulltext(
   name: "tokenLaunchSearch"

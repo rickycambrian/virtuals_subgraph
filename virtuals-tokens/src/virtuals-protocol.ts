@@ -1,17 +1,12 @@
-import { BigInt, Bytes, log, store } from "@graphprotocol/graph-ts"
+import { BigInt, Bytes, log, store, DataSourceContext } from "@graphprotocol/graph-ts"
 import {
   Launched as LaunchedEvent,
   LaunchCall
 } from "../generated/VirtualsProtocol/VirtualsProtocol"
-import {
-  Transfer as TransferEvent,
-  Approval as ApprovalEvent,
-  SellCall
-} from "../generated/ERC20Token/ERC20"
-import {
-  Swap as SwapEvent
-} from "../generated/PairContract/Pair"
 import { TokenLaunch, TradeEvent } from "../generated/schema"
+import { PairTemplate, TokenTemplate } from "../generated/templates"
+
+const VIRTUAL_TOKEN = "0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b"
 
 export function handleLaunched(event: LaunchedEvent): void {
   log.debug('============= Launched Event Debug =============', [])
@@ -48,6 +43,19 @@ export function handleLaunched(event: LaunchedEvent): void {
   
   launch.save()
   log.info('Successfully saved TokenLaunch entity with ID: {}', [id])
+  
+  // Create data sources for the new pair and token contracts
+  let pairContext = new DataSourceContext()
+  pairContext.setString("token", event.params.token.toHexString())
+  pairContext.setString("pair", event.params.pair.toHexString())
+  PairTemplate.createWithContext(event.params.pair, pairContext)
+  log.info('Created PairTemplate data source for pair: {}', [event.params.pair.toHexString()])
+
+  // Create data source for the new token
+  let tokenContext = new DataSourceContext()
+  tokenContext.setString("token", event.params.token.toHexString())
+  TokenTemplate.createWithContext(event.params.token, tokenContext)
+  log.info('Created TokenTemplate data source for token: {}', [event.params.token.toHexString()])
 }
 
 export function handleLaunch(call: LaunchCall): void {
@@ -84,114 +92,4 @@ export function handleLaunch(call: LaunchCall): void {
   } else {
     log.warning('TokenLaunch entity not found for function call. ID: {}', [id])
   }
-}
-
-export function handleTransfer(event: TransferEvent): void {
-  let id = event.transaction.hash
-    .toHexString()
-    .concat('-')
-    .concat(event.logIndex.toString())
-
-  let trade = new TradeEvent(id)
-  trade.transactionHash = event.transaction.hash
-  trade.blockNumber = event.block.number
-  trade.timestamp = event.block.timestamp
-  trade.eventType = "Transfer"
-  
-  trade.tokenAddress = event.address.toHexString()
-  trade.tokenAddressBytes = event.address
-  
-  trade.fromAddress = event.params.from.toHexString()
-  trade.fromAddressBytes = event.params.from
-  trade.toAddress = event.params.to.toHexString()
-  trade.toAddressBytes = event.params.to
-  
-  trade.amountIn = event.params.value
-  
-  trade.save()
-  log.info('Successfully saved Transfer TradeEvent with ID: {}', [id])
-}
-
-export function handleApproval(event: ApprovalEvent): void {
-  let id = event.transaction.hash
-    .toHexString()
-    .concat('-')
-    .concat(event.logIndex.toString())
-
-  let trade = new TradeEvent(id)
-  trade.transactionHash = event.transaction.hash
-  trade.blockNumber = event.block.number
-  trade.timestamp = event.block.timestamp
-  trade.eventType = "Approval"
-  
-  trade.tokenAddress = event.address.toHexString()
-  trade.tokenAddressBytes = event.address
-  
-  trade.fromAddress = event.params.owner.toHexString()
-  trade.fromAddressBytes = event.params.owner
-  trade.toAddress = event.params.spender.toHexString()
-  trade.toAddressBytes = event.params.spender
-  
-  trade.amountIn = event.params.value
-  
-  trade.save()
-  log.info('Successfully saved Approval TradeEvent with ID: {}', [id])
-}
-
-export function handleSwap(event: SwapEvent): void {
-  let id = event.transaction.hash
-    .toHexString()
-    .concat('-')
-    .concat(event.logIndex.toString())
-
-  let trade = new TradeEvent(id)
-  trade.transactionHash = event.transaction.hash
-  trade.blockNumber = event.block.number
-  trade.timestamp = event.block.timestamp
-  trade.eventType = "Swap"
-  
-  trade.tokenAddress = event.address.toHexString()
-  trade.tokenAddressBytes = event.address
-  
-  // For Swap events, we store the detailed amounts
-  trade.amount0In = event.params.amount0In
-  trade.amount0Out = event.params.amount0Out
-  trade.amount1In = event.params.amount1In
-  trade.amount1Out = event.params.amount1Out
-  
-  // Set the main amountIn/Out fields for consistency
-  if (event.params.amount0In.gt(BigInt.fromI32(0))) {
-    trade.amountIn = event.params.amount0In
-  } else {
-    trade.amountIn = event.params.amount1In
-  }
-  
-  if (event.params.amount0Out.gt(BigInt.fromI32(0))) {
-    trade.amountOut = event.params.amount0Out
-  } else {
-    trade.amountOut = event.params.amount1Out
-  }
-  
-  trade.save()
-  log.info('Successfully saved Swap TradeEvent with ID: {}', [id])
-}
-
-export function handleSell(call: SellCall): void {
-  const id = call.transaction.hash.toHexString()
-  
-  let trade = new TradeEvent(id)
-  trade.transactionHash = call.transaction.hash
-  trade.blockNumber = call.block.number
-  trade.timestamp = call.block.timestamp
-  trade.eventType = "Sell"
-  
-  trade.tokenAddress = call.inputs.tokenAddress.toHexString()
-  trade.tokenAddressBytes = call.inputs.tokenAddress
-  trade.fromAddress = call.from.toHexString()
-  trade.fromAddressBytes = call.from
-  
-  trade.amountIn = call.inputs.amountIn
-  
-  trade.save()
-  log.info('Successfully saved Sell TradeEvent with ID: {}', [id])
 }
