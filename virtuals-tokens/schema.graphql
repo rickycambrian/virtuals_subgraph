@@ -32,6 +32,42 @@ type Swap @entity {
   type: String! # "BUY" or "SELL"
 }
 
+type SwapData @entity(timeseries: true) {
+  id: Int8!
+  timestamp: Timestamp!
+  token: Bytes!          # Token address
+  amountToken: BigDecimal!
+  amountUSD: BigDecimal!
+  type: String!         # "BUY" or "SELL"
+  trader: Bytes!
+  isBuy: Int! # 1 for buy, 0 for sell
+  isSell: Int! # 1 for sell, 0 for buy
+  traderCount: Int! # Always 1, used for counting unique traders
+}
+
+type TokenStats @aggregation(intervals: ["hour", "day"], source: "SwapData") {
+  id: Int8!
+  timestamp: Timestamp!
+  token: Bytes!
+  
+  # Volume metrics
+  volumeToken: BigDecimal! @aggregate(fn: "sum", arg: "amountToken")
+  volumeUSD: BigDecimal! @aggregate(fn: "sum", arg: "amountUSD")
+  
+  # Price metrics
+  priceUSD: BigDecimal! @aggregate(fn: "last", arg: "amountUSD / amountToken")
+  highPriceUSD: BigDecimal! @aggregate(fn: "max", arg: "amountUSD / amountToken")
+  lowPriceUSD: BigDecimal! @aggregate(fn: "min", arg: "amountUSD / amountToken")
+  
+  # Trade metrics
+  tradeCount: Int! @aggregate(fn: "sum", arg: "traderCount")
+  buyCount: Int! @aggregate(fn: "sum", arg: "isBuy")
+  sellCount: Int! @aggregate(fn: "sum", arg: "isSell")
+  
+  # Average trade size (total volume / trade count)
+  avgTradeSize: BigDecimal! @aggregate(fn: "sum", arg: "amountToken / traderCount")
+}
+
 type _Schema_
 @fulltext(
   name: "tokenLaunchSearch"
