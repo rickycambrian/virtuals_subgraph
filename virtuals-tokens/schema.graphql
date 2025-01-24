@@ -18,6 +18,20 @@ type TokenLaunch @entity {
   purchaseAmount: BigInt!
 }
 
+type Swap @entity {
+  id: ID! # Transaction hash
+  timestamp: BigInt!
+  block: BigInt!
+  trader: Bytes!
+  tokenIn: Bytes!
+  tokenOut: Bytes!
+  amountIn: BigInt!
+  amountOut: BigInt!
+  feeAmount: BigInt!
+  feeRecipient: Bytes!
+  type: String! # "BUY" or "SELL"
+}
+
 type _Schema_
 @fulltext(
   name: "tokenLaunchSearch"

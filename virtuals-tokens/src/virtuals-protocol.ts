@@ -1,9 +1,10 @@
-import { BigInt, Bytes, log, store } from "@graphprotocol/graph-ts"
+import { BigInt, Bytes, log } from "@graphprotocol/graph-ts"
 import {
   Launched as LaunchedEvent,
   LaunchCall
 } from "../generated/VirtualsProtocol/VirtualsProtocol"
 import { TokenLaunch } from "../generated/schema"
+import { VirtualsPair as VirtualsPairTemplate, ERC20 as ERC20Template } from "../generated/templates"
 
 export function handleLaunched(event: LaunchedEvent): void {
   log.debug('============= Launched Event Debug =============', [])
@@ -40,6 +41,15 @@ export function handleLaunched(event: LaunchedEvent): void {
   
   launch.save()
   log.info('Successfully saved TokenLaunch entity with ID: {}', [id])
+
+  // Create data sources for the new pair and token
+  log.info('Creating data source templates for pair {} and token {}', [
+    event.params.pair.toHexString(),
+    event.params.token.toHexString()
+  ])
+  
+  VirtualsPairTemplate.create(event.params.pair)
+  ERC20Template.create(event.params.token)
 }
 
 export function handleLaunch(call: LaunchCall): void {

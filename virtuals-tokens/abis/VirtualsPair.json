@@ -1,0 +1,34 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount0In",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount0Out",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount1In",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount1Out",
+        "type": "uint256"
+      }
+    ],
+    "name": "Swap",
+    "type": "event",
+    "signature": "0x298c349c742327269dc8de6ad66687767310c948ea309df826f5bd103e19d207"
+  }
+]
