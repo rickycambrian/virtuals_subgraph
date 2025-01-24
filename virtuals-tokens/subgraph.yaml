@@ -19,13 +19,63 @@ dataSources:
       language: wasm/assemblyscript
       entities:
         - TokenLaunch
+        - TradeEvent
       abis:
         - name: VirtualsProtocol
           file: ./abis/VirtualsProtocol.json
+        - name: ERC20
+          file: ./abis/ERC20.json
+        - name: Pair
+          file: ./abis/Pair.json
       eventHandlers:
         - event: Launched(indexed address,indexed address,uint256)
           handler: handleLaunched
       callHandlers:
         - function: launch(string,string,uint8[],string,string,string[4],uint256)
           handler: handleLaunch
+      file: ./src/virtuals-protocol.ts
+  - kind: ethereum
+    name: ERC20Token
+    network: base
+    source:
+      address: "0xF66DeA7b3e897cD44A5a231c61B6B4423d613259"
+      abi: ERC20
+      startBlock: 21855685
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - TradeEvent
+      abis:
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: Transfer(indexed address,indexed address,uint256)
+          handler: handleTransfer
+        - event: Approval(indexed address,indexed address,uint256)
+          handler: handleApproval
+      callHandlers:
+        - function: sell(uint256,address)
+          handler: handleSell
+      file: ./src/virtuals-protocol.ts
+  - kind: ethereum
+    name: PairContract
+    network: base
+    source:
+      address: "0xF66DeA7b3e897cD44A5a231c61B6B4423d613259"
+      abi: Pair
+      startBlock: 21855685
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - TradeEvent
+      abis:
+        - name: Pair
+          file: ./abis/Pair.json
+      eventHandlers:
+        - event: Swap(uint256,uint256,uint256,uint256)
+          handler: handleSwap
       file: ./src/virtuals-protocol.ts

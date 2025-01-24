@@ -18,6 +18,34 @@ type TokenLaunch @entity {
   purchaseAmount: BigInt!
 }
 
+type TradeEvent @entity {
+  id: ID!
+  transactionHash: Bytes!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  eventType: String! # "Transfer", "Approval", or "Swap"
+  
+  # Token information
+  tokenAddress: String!
+  tokenAddressBytes: Bytes!
+  
+  # Addresses involved
+  fromAddress: String!
+  fromAddressBytes: Bytes!
+  toAddress: String
+  toAddressBytes: Bytes
+  
+  # Amounts
+  amountIn: BigInt
+  amountOut: BigInt
+  
+  # Additional Swap-specific fields
+  amount0In: BigInt
+  amount0Out: BigInt
+  amount1In: BigInt
+  amount1Out: BigInt
+}
+
 type _Schema_
 @fulltext(
   name: "tokenLaunchSearch"
