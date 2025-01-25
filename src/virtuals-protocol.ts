@@ -1,4 +1,4 @@
-import { BigInt, Bytes, log } from "@graphprotocol/graph-ts"
+import { BigInt, Bytes, log, Address } from "@graphprotocol/graph-ts"
 import {
   Launched as LaunchedEvent,
   LaunchCall
@@ -14,6 +14,12 @@ export function handleLaunched(event: LaunchedEvent): void {
   log.debug('Pair Address: {}', [event.params.pair.toHexString()])
   log.debug('From Address: {}', [event.transaction.from.toHexString()])
   
+  // Validate addresses
+  if (event.params.token.equals(Bytes.empty()) || event.params.pair.equals(Bytes.empty())) {
+    log.error('Invalid token or pair address', [])
+    return
+  }
+
   // Create a unique ID using the transaction hash and log index
   const id = event.transaction.hash.toHexString()
   log.info('Creating TokenLaunch entity with ID: {}', [id])
@@ -30,7 +36,7 @@ export function handleLaunched(event: LaunchedEvent): void {
   launch.createdAtTx = event.transaction.hash
   launch.timestamp = event.block.timestamp
   
-  // Initialize arrays and strings
+  // Initialize arrays and strings with validation
   launch.cores = []
   launch.urls = []
   launch.name = ''
@@ -48,42 +54,81 @@ export function handleLaunched(event: LaunchedEvent): void {
     event.params.token.toHexString()
   ])
   
-  VirtualsPairTemplate.create(event.params.pair)
-  ERC20Template.create(event.params.token)
+  // Create pair template - continue even if it fails
+  if (!createPairTemplate(event.params.pair)) {
+    log.warning('Failed to create VirtualsPair template, continuing...', [])
+  }
+
+  // Create token template - continue even if it fails
+  if (!createTokenTemplate(event.params.token)) {
+    log.warning('Failed to create ERC20 template, continuing...', [])
+  }
+}
+
+function createPairTemplate(pair: Bytes): boolean {
+  if (pair.equals(Bytes.empty())) {
+    log.warning('Invalid pair address for template creation', [])
+    return false
+  }
+
+  VirtualsPairTemplate.create(Address.fromBytes(pair))
+  return true
+}
+
+function createTokenTemplate(token: Bytes): boolean {
+  if (token.equals(Bytes.empty())) {
+    log.warning('Invalid token address for template creation', [])
+    return false
+  }
+
+  ERC20Template.create(Address.fromBytes(token))
+  return true
 }
 
 export function handleLaunch(call: LaunchCall): void {
+  // Input validation
+  if (call.inputs._name.length == 0 || call.inputs._ticker.length == 0) {
+    log.warning('Invalid name or ticker in launch call', [])
+    return
+  }
+
   // Use transaction hash as ID to match with the event
   const id = call.transaction.hash.toHexString()
   let launch = TokenLaunch.load(id)
   
-  if (launch) {
-    log.info('Updating TokenLaunch entity with function parameters. ID: {}', [id])
-    
-    // Update with function parameters
-    launch.name = call.inputs._name
-    launch.ticker = call.inputs._ticker
-    launch.description = call.inputs.desc
-    launch.imageUrl = call.inputs.img
-    launch.purchaseAmount = call.inputs.purchaseAmount
-    
-    // Convert cores array
-    let coresArray = new Array<i32>()
-    for (let i = 0; i < call.inputs.cores.length; i++) {
-      coresArray.push(call.inputs.cores[i])
-    }
-    launch.cores = coresArray
-    
-    // Convert urls array
+  if (!launch) {
+    log.warning('TokenLaunch entity not found for function call. ID: {}', [id])
+    return
+  }
+
+  log.info('Updating TokenLaunch entity with function parameters. ID: {}', [id])
+  
+  // Update with function parameters
+  launch.name = call.inputs._name
+  launch.ticker = call.inputs._ticker
+  launch.description = call.inputs.desc
+  launch.imageUrl = call.inputs.img
+  launch.purchaseAmount = call.inputs.purchaseAmount
+  
+  // Validate and convert cores array
+  if (call.inputs.cores.length > 0) {
+    launch.cores = call.inputs.cores
+  }
+  
+  // Validate and convert urls array
+  if (call.inputs.urls.length > 0) {
     let urlsArray = new Array<string>()
     for (let i = 0; i < call.inputs.urls.length; i++) {
-      urlsArray.push(call.inputs.urls[i])
+      // Basic URL validation
+      if (call.inputs.urls[i].length > 0) {
+        urlsArray.push(call.inputs.urls[i])
+      } else {
+        log.warning('Empty URL at index: {}', [i.toString()])
+      }
     }
     launch.urls = urlsArray
-    
-    launch.save()
-    log.info('Successfully updated TokenLaunch with function parameters', [])
-  } else {
-    log.warning('TokenLaunch entity not found for function call. ID: {}', [id])
   }
+  
+  launch.save()
+  log.info('Successfully updated TokenLaunch with function parameters', [])
 }

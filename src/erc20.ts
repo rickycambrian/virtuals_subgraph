@@ -1,7 +1,10 @@
 import { BigInt, log } from "@graphprotocol/graph-ts"
-import { Transfer as TransferEvent } from "../generated/templates/ERC20/ERC20"
+import { 
+  Transfer as TransferEvent,
+  ERC20
+} from "../generated/templates/ERC20/ERC20"
 import { Swap } from "../generated/schema"
-import { loadOrCreateTokenSupply, convertToDecimal } from "./utils"
+import { loadOrCreateTokenSupply, convertToDecimal, ZERO_BI } from "./utils"
 
 const FEE_RECIPIENT = "0x9883A9f1284A1F0187401195DC1309F6cC167147"
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
@@ -12,14 +15,54 @@ export function handleTransfer(event: TransferEvent): void {
 
   // Update token supply tracking
   let supply = loadOrCreateTokenSupply(token)
-  let currentSupply = convertToDecimal(event.params.value)
+  if (!supply) {
+    log.warning('Failed to load or create token supply for token: {}', [token.toHexString()])
+    return
+  }
+
+  // If this is the first transfer, initialize token data
+  if (supply.decimals == 18) { // Default value indicates uninitialized
+    let erc20 = ERC20.bind(token)
+    
+    // Get decimals - call will return 0 if it fails
+    let decimalsResult = erc20.decimals()
+    if (decimalsResult > 0) {
+      supply.decimals = decimalsResult
+      log.info('Updated decimals for token: {} to {}', [
+        token.toHexString(),
+        decimalsResult.toString()
+      ])
+    } else {
+      log.warning('Failed to get decimals for token: {}', [token.toHexString()])
+    }
+
+    // Get total supply - call will return 0 if it fails
+    let totalSupplyResult = erc20.totalSupply()
+    if (totalSupplyResult.gt(ZERO_BI)) {
+      supply.totalSupply = convertToDecimal(totalSupplyResult, BigInt.fromI32(supply.decimals))
+      log.info('Updated total supply for token: {} to {}', [
+        token.toHexString(),
+        supply.totalSupply.toString()
+      ])
+    } else {
+      log.warning('Failed to get total supply for token: {}', [token.toHexString()])
+    }
+  }
+
+  let currentSupply = convertToDecimal(event.params.value, BigInt.fromI32(supply.decimals))
 
   if (event.params.from.toHexString() == ZERO_ADDRESS) {
-    // Mint: increase circulating supply
+    // Mint: increase both supplies
     supply.circulatingSupply = supply.circulatingSupply.plus(currentSupply)
+    supply.totalSupply = supply.totalSupply.plus(currentSupply)
   } else if (event.params.to.toHexString() == ZERO_ADDRESS) {
-    // Burn: decrease circulating supply
+    // Burn: decrease both supplies
     supply.circulatingSupply = supply.circulatingSupply.minus(currentSupply)
+    supply.totalSupply = supply.totalSupply.minus(currentSupply)
+  } else {
+    // Regular transfer: only update circulating supply if needed
+    // For example, if transferring to/from a known excluded address
+    // like a treasury or vesting contract
   }
 
   supply.lastUpdateBlock = event.block.number

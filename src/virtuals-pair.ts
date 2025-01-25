@@ -1,4 +1,4 @@
-import { BigDecimal, BigInt, Bytes } from "@graphprotocol/graph-ts"
+import { BigDecimal, BigInt, Bytes, log } from "@graphprotocol/graph-ts"
 import { Swap as SwapEvent } from "../generated/templates/VirtualsPair/VirtualsPair"
 import { Swap, TradeSnapshot, TokenDayStats, TokenTraderStats } from "../generated/schema"
 import {
@@ -8,14 +8,23 @@ import {
   convertToDecimal,
   createTradeSnapshot,
   loadOrCreateTokenSupply,
-  loadOrCreateTokenDayStats,
+  createTokenDayStats,
   loadOrCreateTokenTraderStats,
+  getDayStartTimestamp,
   abs,
   max,
-  min
+  min,
+  getTokenPriceUSD,
+  updateTokenPrice
 } from "./utils"
 
 export function handleSwap(event: SwapEvent): void {
+  // Input validation
+  if (event.params.amount0In.equals(ZERO_BI) && event.params.amount1In.equals(ZERO_BI)) {
+    log.warning("Invalid swap amounts: both input amounts are zero", [])
+    return
+  }
+
   // Create immutable Swap entity
   let swap = new Swap(event.transaction.hash)
   swap.timestamp = event.block.timestamp
@@ -37,15 +46,37 @@ export function handleSwap(event: SwapEvent): void {
 
   swap.save()
 
-  // Calculate amounts in decimals
+  // Calculate token volume and price
   const volumeToken = convertToDecimal(isSell ? event.params.amount0In : event.params.amount1In)
-  const volumeUSD = convertToDecimal(isSell ? event.params.amount1Out : event.params.amount0Out)
-  const priceUSD = volumeUSD.div(volumeToken)
+  if (volumeToken.equals(ZERO_BD)) {
+    log.warning("Volume token is zero, skipping price calculation", [])
+    return
+  }
+
+  // Get USD price using our price calculation logic
+  const priceUSD = getTokenPriceUSD(
+    event.address,
+    event.params.amount0In,
+    event.params.amount1In,
+    isSell
+  )
+
+  // Calculate USD volume based on actual price
+  const volumeUSD = volumeToken.times(priceUSD)
+
+  // Update token price if valid
+  if (priceUSD.gt(ZERO_BD)) {
+    updateTokenPrice(event.address, priceUSD, event.block.number)
+  }
 
   // Load or create supply tracking
   let supply = loadOrCreateTokenSupply(event.address)
+  if (!supply) {
+    log.warning("Failed to load or create token supply for {}", [event.address.toHexString()])
+    return
+  }
 
-  // Create immutable trade snapshot
+  // Create and save trade snapshot with market cap calculation
   let tradeSnapshot = createTradeSnapshot(
     event.address,
     event.block.timestamp,
@@ -57,13 +88,35 @@ export function handleSwap(event: SwapEvent): void {
     type,
     supply
   )
+
+  // Update market cap in trade snapshot
+  if (priceUSD.gt(ZERO_BD) && supply.totalSupply.gt(ZERO_BD)) {
+    tradeSnapshot.marketCap = supply.totalSupply.times(priceUSD)
+  }
+  
   tradeSnapshot.save()
 
-  // Update mutable day stats
-  let dayStats = loadOrCreateTokenDayStats(event.address, event.block.timestamp)
-  
+  // Find previous day stats if they exist
+  let dayStartTimestamp = getDayStartTimestamp(event.block.timestamp)
+  let prevStats: TokenDayStats | null = null
+  let allStats = TokenDayStats.load(event.address)
+  if (allStats) {
+    let stats = TokenDayStats.load(event.address)
+    if (stats && stats.date.equals(dayStartTimestamp)) {
+      prevStats = stats
+    }
+  }
+
+  // Create new immutable day stats
+  let dayStats = createTokenDayStats(
+    event.address,
+    event.block.timestamp,
+    event.transaction.hash,
+    prevStats
+  )
+
   // Update price metrics
-  if (dayStats.txCount == 0) {
+  if (!prevStats) {
     dayStats.openPrice = priceUSD
   }
   dayStats.closePrice = priceUSD
@@ -80,14 +133,7 @@ export function handleSwap(event: SwapEvent): void {
   dayStats.txCount += 1
   dayStats.buyCount += isSell ? 0 : 1
   dayStats.sellCount += isSell ? 1 : 0
-
-  // Update unique traders
-  let traders = dayStats.uniqueTraders
-  if (!traders.includes(event.transaction.from)) {
-    traders.push(event.transaction.from)
-    dayStats.uniqueTraderCount += 1
-  }
-  dayStats.uniqueTraders = traders
+  dayStats.uniqueTraderCount += 1
 
   // Update trade size metrics
   if (volumeToken.gt(dayStats.largestTrade)) {
@@ -96,12 +142,22 @@ export function handleSwap(event: SwapEvent): void {
   if (dayStats.smallestTrade.equals(ZERO_BD) || volumeToken.lt(dayStats.smallestTrade)) {
     dayStats.smallestTrade = volumeToken
   }
-  dayStats.averageTradeSize = dayStats.volumeToken.div(BigDecimal.fromString(dayStats.txCount.toString()))
+
+  if (dayStats.txCount > 0) {
+    dayStats.averageTradeSize = dayStats.volumeToken.div(BigDecimal.fromString(dayStats.txCount.toString()))
+  }
 
   // Update ratios and changes
-  dayStats.buyRatio = BigDecimal.fromString(dayStats.buyCount.toString())
-    .div(BigDecimal.fromString(dayStats.txCount.toString()))
-  dayStats.priceChange = priceUSD.minus(dayStats.openPrice).div(dayStats.openPrice).times(BigDecimal.fromString("100"))
+  if (dayStats.txCount > 0) {
+    dayStats.buyRatio = BigDecimal.fromString(dayStats.buyCount.toString())
+      .div(BigDecimal.fromString(dayStats.txCount.toString()))
+  }
+  
+  if (!dayStats.openPrice.equals(ZERO_BD)) {
+    dayStats.priceChange = priceUSD.minus(dayStats.openPrice)
+      .div(dayStats.openPrice)
+      .times(BigDecimal.fromString("100"))
+  }
 
   // Update price analytics
   if (dayStats.txCount > 1) {
@@ -122,16 +178,20 @@ export function handleSwap(event: SwapEvent): void {
 
     // Calculate price impact and volatility
     let priceChange = abs(priceUSD.minus(dayStats.closePrice))
-    dayStats.averagePriceImpact = dayStats.averagePriceImpact
-      .times(BigDecimal.fromString((dayStats.txCount - 1).toString()))
-      .plus(priceChange)
-      .div(BigDecimal.fromString(dayStats.txCount.toString()))
+    if (dayStats.txCount > 0) {
+      dayStats.averagePriceImpact = dayStats.averagePriceImpact
+        .times(BigDecimal.fromString((dayStats.txCount - 1).toString()))
+        .plus(priceChange)
+        .div(BigDecimal.fromString(dayStats.txCount.toString()))
+    }
     
     // Update VWAP
-    dayStats.volumeWeightedPrice = dayStats.volumeWeightedPrice
-      .times(dayStats.volumeToken)
-      .plus(priceUSD.times(volumeToken))
-      .div(dayStats.volumeToken.plus(volumeToken))
+    if (!dayStats.volumeToken.equals(ZERO_BD)) {
+      dayStats.volumeWeightedPrice = dayStats.volumeWeightedPrice
+        .times(dayStats.volumeToken)
+        .plus(priceUSD.times(volumeToken))
+        .div(dayStats.volumeToken.plus(volumeToken))
+    }
   }
 
   // Update volume analytics
@@ -144,57 +204,43 @@ export function handleSwap(event: SwapEvent): void {
   }
 
   // Update market health metrics
-  dayStats.liquidityScore = dayStats.averagePriceImpact.equals(ZERO_BD) ? ZERO_BD :
-    ONE_BD.div(dayStats.averagePriceImpact)
-  dayStats.marketEfficiency = dayStats.priceVolatility.equals(ZERO_BD) ? ONE_BD :
-    ONE_BD.div(dayStats.priceVolatility)
-  dayStats.buyPressure = dayStats.buyVolumeRatio.minus(BigDecimal.fromString("0.5")).times(BigDecimal.fromString("2"))
-  dayStats.marketDepth = dayStats.volumeToken.div(max(dayStats.priceVolatility, ONE_BD))
+  if (!dayStats.averagePriceImpact.equals(ZERO_BD)) {
+    dayStats.liquidityScore = ONE_BD.div(dayStats.averagePriceImpact)
+  }
+  if (!dayStats.priceVolatility.equals(ZERO_BD)) {
+    dayStats.marketEfficiency = ONE_BD.div(dayStats.priceVolatility)
+  }
+  dayStats.buyPressure = dayStats.buyVolumeRatio.minus(BigDecimal.fromString("0.5"))
+    .times(BigDecimal.fromString("2"))
+  if (!dayStats.priceVolatility.equals(ZERO_BD)) {
+    dayStats.marketDepth = dayStats.volumeToken.div(max(dayStats.priceVolatility, ONE_BD))
+  }
 
-  // Update time-based analytics
+  // Update peak trading hours
   let hour = event.block.timestamp.toI32() / 3600 % 24
-  let hourlyVolume = dayStats.hourlyVolume
-  let hourlyTrades = dayStats.hourlyTrades
-
-  // Initialize arrays if they're empty
-  if (hourlyVolume.length == 0) {
-    for (let i = 0; i < 24; i++) {
-      hourlyVolume.push(ZERO_BD)
-      hourlyTrades.push(0)
+  if (hour >= 0 && hour < 24) {
+    if (volumeToken.gt(dayStats.volumeToken)) {
+      dayStats.peakTradingHour = hour
+    }
+    if (dayStats.quietTradingHour == 0 || volumeToken.lt(dayStats.volumeToken)) {
+      dayStats.quietTradingHour = hour
     }
   }
 
-  // Safely update the arrays
-  if (hour < hourlyVolume.length) {
-    hourlyVolume[hour] = hourlyVolume[hour].plus(volumeToken)
-    hourlyTrades[hour] = hourlyTrades[hour] + 1
-  }
-  dayStats.hourlyVolume = hourlyVolume
-  dayStats.hourlyTrades = hourlyTrades
-
-  // Find peak and quiet hours
-  let maxVolume = ZERO_BD
-  let minVolume = hourlyVolume.length > 0 ? hourlyVolume[0] : ZERO_BD
-
-  for (let i = 0; i < hourlyVolume.length; i++) {
-    if (hourlyVolume[i].gt(maxVolume)) {
-      maxVolume = hourlyVolume[i]
-      dayStats.peakTradingHour = i
-    }
-    if (hourlyVolume[i].lt(minVolume)) {
-      minVolume = hourlyVolume[i]
-      dayStats.quietTradingHour = i
-    }
-  }
-
-  // Update market metrics
+  // Update market metrics using total supply for market cap
   dayStats.circulatingSupply = supply.circulatingSupply
-  dayStats.marketCap = supply.circulatingSupply.times(priceUSD)
+  if (priceUSD.gt(ZERO_BD) && supply.totalSupply.gt(ZERO_BD)) {
+    dayStats.marketCap = supply.totalSupply.times(priceUSD)
+  }
 
   dayStats.save()
 
-  // Update mutable trader stats
+  // Update trader stats
   let traderStats = loadOrCreateTokenTraderStats(event.address, event.transaction.from, event.block.timestamp)
+  if (!traderStats) {
+    log.warning("Failed to load or create trader stats", [])
+    return
+  }
   
   traderStats.txCount += 1
   traderStats.volumeToken = traderStats.volumeToken.plus(volumeToken)
@@ -205,15 +251,19 @@ export function handleSwap(event: SwapEvent): void {
   // Update trade frequency
   if (traderStats.txCount > 1) {
     let timeSinceLastTrade = event.block.timestamp.minus(traderStats.date)
-    traderStats.tradeFrequency = traderStats.tradeFrequency
-      .times(BigDecimal.fromString((traderStats.txCount - 1).toString()))
-      .plus(convertToDecimal(timeSinceLastTrade))
-      .div(BigDecimal.fromString(traderStats.txCount.toString()))
+    if (!timeSinceLastTrade.isZero()) {
+      traderStats.tradeFrequency = traderStats.tradeFrequency
+        .times(BigDecimal.fromString((traderStats.txCount - 1).toString()))
+        .plus(convertToDecimal(timeSinceLastTrade))
+        .div(BigDecimal.fromString(traderStats.txCount.toString()))
+    }
   }
 
   // Update position metrics
-  traderStats.averagePositionSize = traderStats.volumeToken
-    .div(BigDecimal.fromString(traderStats.txCount.toString()))
+  if (traderStats.txCount > 0) {
+    traderStats.averagePositionSize = traderStats.volumeToken
+      .div(BigDecimal.fromString(traderStats.txCount.toString()))
+  }
 
   if (isSell) {
     traderStats.averageExitPrice = priceUSD
@@ -235,16 +285,20 @@ export function handleSwap(event: SwapEvent): void {
       }
 
       // Update profitability ratio
-      let profitableTrades = traderStats.winningStreak
-      traderStats.profitabilityRatio = BigDecimal.fromString(profitableTrades.toString())
-        .div(BigDecimal.fromString(traderStats.txCount.toString()))
+      if (traderStats.txCount > 0) {
+        let profitableTrades = traderStats.winningStreak
+        traderStats.profitabilityRatio = BigDecimal.fromString(profitableTrades.toString())
+          .div(BigDecimal.fromString(traderStats.txCount.toString()))
+      }
 
       // Update max drawdown
-      let drawdown = traderStats.averageEntryPrice.minus(priceUSD)
-        .div(traderStats.averageEntryPrice)
-        .times(BigDecimal.fromString("100"))
-      if (drawdown.gt(traderStats.maxDrawdown)) {
-        traderStats.maxDrawdown = drawdown
+      if (!traderStats.averageEntryPrice.equals(ZERO_BD)) {
+        let drawdown = traderStats.averageEntryPrice.minus(priceUSD)
+          .div(traderStats.averageEntryPrice)
+          .times(BigDecimal.fromString("100"))
+        if (drawdown.gt(traderStats.maxDrawdown)) {
+          traderStats.maxDrawdown = drawdown
+        }
       }
     }
   } else {

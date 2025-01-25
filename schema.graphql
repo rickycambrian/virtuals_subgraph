@@ -35,8 +35,13 @@ type Swap @entity(immutable: true) {
 type TokenSupply @entity {
   id: Bytes!          # Token address
   circulatingSupply: BigDecimal!
+  totalSupply: BigDecimal!    # Track total supply separately
+  decimals: Int!             # Store token decimals
   lastUpdateBlock: BigInt!
   lastUpdateTimestamp: BigInt!
+  isUSDPair: Boolean!        # Flag if this token is paired with USD
+  lastPriceUSD: BigDecimal!  # Last known USD price
+  lastPriceUpdateBlock: BigInt! # Block when price was last updated
 }
 
 type TradeSnapshot @entity(immutable: true) {
@@ -57,7 +62,7 @@ type TradeSnapshot @entity(immutable: true) {
   circulatingSupply: BigDecimal!
 }
 
-type TokenDayStats @entity {
+type TokenDayStats @entity(immutable: true) {
   id: Bytes!          # Concatenated token address and day timestamp
   token: Bytes!
   date: BigInt!
@@ -79,7 +84,6 @@ type TokenDayStats @entity {
   buyCount: Int!
   sellCount: Int!
   uniqueTraderCount: Int!
-  uniqueTraders: [Bytes!]!
   
   # Market metrics
   marketCap: BigDecimal!
@@ -103,7 +107,6 @@ type TokenDayStats @entity {
   volumeWeightedPrice: BigDecimal!   # VWAP for more accurate price representation
   
   # Enhanced volume analytics
-  volumeDistribution: [BigDecimal!]! # Distribution of trade sizes in percentiles (10 values for deciles)
   largeTradeCount: Int!             # Number of trades above average size
   buyVolumeRatio: BigDecimal!       # Buy volume / total volume
   
@@ -114,8 +117,6 @@ type TokenDayStats @entity {
   marketDepth: BigDecimal!          # Average trade size possible without significant price impact
   
   # Time-based analytics
-  hourlyVolume: [BigDecimal!]!      # Volume distribution by hour (24 values)
-  hourlyTrades: [Int!]!             # Trade count distribution by hour (24 values)
   peakTradingHour: Int!             # Hour with highest volume
   quietTradingHour: Int!            # Hour with lowest volume
 }
@@ -149,6 +150,172 @@ type TokenTraderStats @entity {
   winningStreak: Int!               # Longest streak of profitable trades
   losingStreak: Int!                # Longest streak of unprofitable trades
 }
+
+type Agent @entity {
+  id: ID!
+  virtualId: BigInt!
+  founder: Bytes!
+  dao: Bytes!
+  token: Bytes!
+  tba: Bytes!
+  coreTypes: [Int!]!
+  createdAt: BigInt!
+  maturityScore: BigInt!
+  graduatedToUniswap: Boolean!
+  graduationTimestamp: BigInt
+  totalStaked: BigDecimal!
+  uniqueStakers: BigInt!
+  stakingRewardsDistributed: BigDecimal!
+  
+  # Performance Fields
+  graduationProgress: BigDecimal!
+  serviceSuccessRate: BigDecimal!
+  performanceRank: BigInt!
+  lastRankUpdate: BigInt!
+  servicesArray: [String!]! # Store service IDs as strings
+  
+  # Additional Analytics Fields
+  averageStakeDuration: BigInt!
+  stakingAPY: BigDecimal!
+  validatorCount: BigInt!
+  activeValidatorCount: BigInt!
+  totalServiceImpact: BigDecimal!
+  averageServiceImpact: BigDecimal!
+  lastServiceTimestamp: BigInt!
+  contributionAcceptanceRate: BigDecimal!
+  
+  # Relationships
+  validators: [Validator!]! @derivedFrom(field: "agent")
+  contributions: [Contribution!]! @derivedFrom(field: "agent")
+  services: [Service!]! @derivedFrom(field: "agent")
+  dailySnapshots: [AgentDayData!]! @derivedFrom(field: "agent")
+  historicalMaturityScores: [MaturityScoreSnapshot!]! @derivedFrom(field: "agent")
+}
+
+type MaturityScoreSnapshot @entity(immutable: true) {
+  id: ID!
+  agent: Agent!
+  timestamp: BigInt!
+  score: BigInt!
+  blockNumber: BigInt!
+  growthRate: BigDecimal!
+}
+
+type Validator @entity {
+  id: ID!
+  agent: Agent!
+  address: Bytes!
+  score: BigInt!
+  totalRewardsEarned: BigDecimal!
+  validationCount: BigInt!
+  lastActiveTimestamp: BigInt!
+}
+
+type Contribution @entity {
+  id: ID!
+  agent: Agent!
+  contributor: Bytes!
+  parentContribution: Contribution
+  childContributions: [Contribution!]! @derivedFrom(field: "parentContribution")
+  coreType: Int!
+  timestamp: BigInt!
+  accepted: Boolean!
+  service: Service
+}
+
+type Service @entity {
+  id: ID!
+  agent: Agent!
+  contribution: Contribution!
+  maturityScore: BigInt!
+  impact: BigDecimal!
+  coreType: Int!
+  timestamp: BigInt!
+  rewardsGenerated: BigDecimal!
+  
+  # New Economic Impact Fields
+  priceImpact: BigDecimal!
+  rewardEfficiency: BigDecimal!
+  liquidityEffect: BigDecimal!
+  token: Bytes # Store the token address
+}
+
+type TokenEconomics @entity {
+  id: ID!
+  token: Bytes!
+  updateTimestamp: BigInt!
+  
+  # Liquidity Metrics
+  liquidityDepth: BigDecimal!
+  liquidityUtilization: BigDecimal!
+  
+  # Velocity Metrics
+  tokenVelocity: BigDecimal!
+  holdingTimeAverage: BigInt!
+  
+  # Distribution Metrics
+  rewardDistributionEfficiency: BigDecimal!
+  stakingYield: BigDecimal!
+  validatorYield: BigDecimal!
+}
+
+type EconomicSnapshot @entity(immutable: true) {
+  id: ID!
+  token: Bytes!
+  timestamp: BigInt!
+  
+  priceUSD: BigDecimal!
+  liquidityDepth: BigDecimal!
+  tokenVelocity: BigDecimal!
+  rewardEfficiency: BigDecimal!
+  
+  triggerType: String!
+  triggerAddress: Bytes!
+}
+
+type AgentDayData @entity {
+  id: ID!
+  agent: Agent!
+  date: BigInt!
+  
+  # Staking metrics
+  dailyStakeAmount: BigDecimal!
+  dailyUnstakeAmount: BigDecimal!
+  netStakingChange: BigDecimal!
+  uniqueDailyStakers: BigInt!
+  averageStakeSize: BigDecimal!
+  
+  # Service metrics
+  newContributions: BigInt!
+  acceptedServices: BigInt!
+  dailyImpactScore: BigDecimal!
+  
+  # Reward metrics
+  dailyRewardsGenerated: BigDecimal!
+  stakersRewards: BigDecimal!
+  validatorsRewards: BigDecimal!
+  contributorsRewards: BigDecimal!
+  protocolRewards: BigDecimal!
+  rewardPerStake: BigDecimal!
+  
+  # Validator metrics
+  activeValidators: BigInt!
+  averageValidatorScore: BigDecimal!
+  validationsPerValidator: BigDecimal!
+  
+  # Performance Fields
+  maturityScoreChange: BigDecimal!
+  serviceSuccessCount: BigInt!
+  serviceFailureCount: BigInt!
+  dailySuccessRate: BigDecimal!
+  performanceScore: BigDecimal!
+  
+  # Distribution metrics
+  stakeSizeDistribution: [BigDecimal!]!
+  impactScoreDistribution: [BigDecimal!]!
+  validatorScoreDistribution: [BigDecimal!]!
+}
+
 
 type _Schema_
 @fulltext(

@@ -1,0 +1,323 @@
+# Virtuals Analytics
+
+Single page application to show analytics from virtuals subgraph: https://thegraph.com/explorer/subgraphs/FJ42AgdSR7rg9CTY7eUB7MPZbhmih4xKoXEUfh8oHroc
+
+## Tech Stack
+
+### Frontend
+- React 18+ with TypeScript
+- Vite for build tooling
+- TailwindCSS for styling
+- Recharts for visualizations
+- Apollo Client for GraphQL queries
+- React Router for navigation
+- React Query for data caching
+
+### Development Tools
+- ESLint + Prettier for code formatting
+- Vitest for unit testing
+- Cypress for E2E testing
+- GitHub Actions for CI/CD
+
+## Page Structure
+
+### Navigation
+- Fixed sidebar with main navigation
+- Top bar with global filters:
+  - Time range selector (24h, 7d, 30d, All)
+  - Agent type filter (All, Pre-graduation, Post-graduation)
+
+### Main Dashboard
+1. Global Stats Section
+   - Total Agents Count
+   - Total Value Locked (TVL)
+   - Total Rewards Distributed
+   - Active Validators Count
+   - Total Services Count
+   - Average Maturity Score
+
+2. Agent Performance Section
+   - Agent Growth Chart (new agents over time)
+   - Graduation Rate Chart
+   - Top Performing Agents Table
+   - Maturity Score Distribution
+
+3. Validator Analytics Section
+   - Validator Activity Heatmap
+   - Top Validators by Score
+   - Validation Distribution by Core Type
+   - Validator Rewards Chart
+
+4. Contribution & Service Metrics
+   - Service Acceptance Rate Chart
+   - Impact Score Distribution
+   - Core Type Distribution
+   - Contribution Relationship Graph
+
+5. Staking Analytics
+   - TVL Growth Chart
+   - Staker Distribution
+   - Reward APY Chart
+   - Staking Duration Distribution
+
+### Detailed Views
+
+#### Agent Details Page
+- Agent Overview
+  - Basic Info (ID, Creation Date, Status)
+  - Performance Metrics
+  - Graduation Progress
+- Staking History
+- Service History
+- Validator Activity
+- Reward Distribution
+
+#### Validator Analytics Page
+- Performance Metrics
+- Validation History
+- Reward History
+- Agent Distribution
+
+#### Services Dashboard
+- Service Impact Matrix
+- Core Type Performance
+- Contribution Flow
+- Acceptance Metrics
+
+## Example Queries
+
+### Global Stats Query
+```graphql
+query GlobalStats($timeRange: Int!) {
+  agents(where: { createdAt_gt: $timeRange }) {
+    totalCount: id
+    graduatedCount: graduatedToUniswap
+    totalStaked
+    stakingRewardsDistributed
+  }
+  validators {
+    totalCount: id
+    averageScore
+  }
+  services {
+    totalCount: id
+    averageImpact
+  }
+}
+```
+
+### Agent Performance Query
+```graphql
+query AgentPerformance($timeRange: Int!) {
+  agents(
+    where: { createdAt_gt: $timeRange }
+    orderBy: maturityScore
+    orderDirection: desc
+  ) {
+    id
+    virtualId
+    graduatedToUniswap
+    maturityScore
+    totalStaked
+    stakingRewardsDistributed
+    services {
+      id
+      impact
+      maturityScore
+    }
+    validators {
+      id
+      score
+      validationCount
+    }
+  }
+}
+```
+
+### Validator Analytics Query
+```graphql
+query ValidatorMetrics($timeRange: Int!) {
+  validators(
+    where: { lastActiveTimestamp_gt: $timeRange }
+    orderBy: score
+    orderDirection: desc
+  ) {
+    id
+    address
+    score
+    totalRewardsEarned
+    validationCount
+    agent {
+      id
+      virtualId
+      graduatedToUniswap
+    }
+  }
+}
+```
+
+### Service Impact Query
+```graphql
+query ServiceMetrics($timeRange: Int!) {
+  services(
+    where: { timestamp_gt: $timeRange }
+    orderBy: impact
+    orderDirection: desc
+  ) {
+    id
+    maturityScore
+    impact
+    coreType
+    rewardsGenerated
+    agent {
+      id
+      virtualId
+      graduatedToUniswap
+    }
+    contribution {
+      id
+      contributor
+      parentContribution {
+        id
+      }
+    }
+  }
+}
+```
+
+### Daily Analytics Query
+```graphql
+query DailyMetrics($timeRange: Int!) {
+  agentDayDatas(
+    where: { date_gt: $timeRange }
+    orderBy: date
+    orderDirection: asc
+  ) {
+    id
+    date
+    dailyStakeAmount
+    dailyUnstakeAmount
+    netStakingChange
+    uniqueDailyStakers
+    newContributions
+    acceptedServices
+    dailyImpactScore
+    dailyRewardsGenerated
+    stakersRewards
+    validatorsRewards
+    contributorsRewards
+    protocolRewards
+    activeValidators
+    averageValidatorScore
+  }
+}
+```
+
+## Data Visualization Components
+
+### Charts
+1. Time Series Charts
+   - Agent Growth Line Chart
+   - TVL Area Chart
+   - Reward Distribution Stacked Area Chart
+   - Validation Activity Line Chart
+
+2. Distribution Charts
+   - Maturity Score Distribution Histogram
+   - Stake Size Distribution Bar Chart
+   - Core Type Distribution Pie Chart
+   - Impact Score Box Plot
+
+3. Relationship Charts
+   - Contribution Network Graph
+   - Validator-Agent Relationship Chord Diagram
+   - Service Impact Heat Map
+   - Graduation Progress Gauge Chart
+
+### Tables
+1. Agent Table
+   - Columns: ID, Status, TVL, Rewards, Services, Validators
+   - Sortable by any column
+   - Filterable by status and metrics
+   - Expandable rows for details
+
+2. Validator Table
+   - Columns: Address, Score, Validations, Rewards, Active Agents
+   - Performance trend sparklines
+   - Filter by activity status
+
+3. Service Table
+   - Columns: ID, Core Type, Impact, Maturity Score, Agent
+   - Impact score color coding
+   - Filter by core type
+
+## Interactive Features
+
+### Filters
+1. Global Filters
+   - Time Range Selection
+   - Agent Status Filter
+   - Core Type Filter
+   - Minimum TVL Filter
+
+2. Chart-Specific Filters
+   - Metric Selection
+   - Aggregation Period
+   - Display Type Toggle
+
+### User Interactions
+1. Drill-Down Capabilities
+   - Click-through from overview to details
+   - Expandable chart data points
+   - Contextual tooltips
+
+2. Data Export
+   - CSV export for all tables
+   - Chart image download
+   - API query copying
+
+3. View Customization
+   - Chart type switching
+   - Metric comparison overlay
+   - Custom time range selection
+
+## Performance Considerations
+
+### Data Loading
+- Implement pagination for large datasets
+- Use GraphQL fragments for efficient querying
+- Cache frequently accessed data
+- Implement loading states and placeholders
+
+### Optimization
+- Lazy load components and routes
+- Memoize expensive calculations
+- Debounce real-time updates
+- Implement virtual scrolling for long lists
+
+### Error Handling
+- Graceful fallbacks for failed queries
+- Clear error messages
+- Automatic retry logic
+- Data validation
+
+## Future Enhancements
+
+### Phase 2 Features
+1. Advanced Analytics
+   - Predictive graduation modeling
+   - Validator performance scoring
+   - Impact score forecasting
+   - Network health indicators
+
+2. User Features
+   - Custom dashboard layouts
+   - Saved filters and views
+   - Email reports and alerts
+   - API key management
+
+3. Integration Features
+   - Uniswap pool performance integration
+   - Cross-chain analytics
+   - Wallet integration
+   - Social sharing capabilities

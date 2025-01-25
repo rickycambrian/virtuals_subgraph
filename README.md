@@ -33,7 +33,7 @@ The subgraph tracks the following data:
 - Volume analysis (distribution, large trades)
 - Market health indicators (liquidity, efficiency)
 - Trader behavior (profitability, patterns)
-- Time-based analytics (hourly distributions)
+- Peak trading hours tracking
 
 ## Example Queries
 
@@ -192,5 +192,5 @@ graph deploy virtuals-tokens
 - Features comprehensive trading analytics and market statistics
 - Supports fulltext search on token addresses, names, tickers, and descriptions
 - Includes detailed market health metrics and trader performance analytics
-- Tracks hourly and daily statistics for in-depth market analysis
+- Tracks daily statistics and peak trading hours for market analysis
 - Provides advanced analytics like price impact, market efficiency, and trader profitability
