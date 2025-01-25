@@ -7,7 +7,14 @@ import {
   AgentDayData,
   MaturityScoreSnapshot,
   TokenEconomics,
-  EconomicSnapshot
+  EconomicSnapshot,
+  RankSnapshot,
+  CoreTypeRank,
+  GraduationMarketImpact,
+  NetworkMetrics,
+  GraduationPrediction,
+  ValidatorNetwork,
+  MarketHealthSnapshot
 } from '../../generated/schema'
 import {
   AgentCreated,
@@ -25,65 +32,212 @@ const ONE_BI = BigInt.fromI32(1)
 const ZERO_BD = BigDecimal.fromString('0')
 const HUNDRED_BD = BigDecimal.fromString('100')
 
-function createMaturityScoreSnapshot(
-  agent: Agent,
-  newScore: BigInt,
-  timestamp: BigInt,
-  blockNumber: BigInt
-): void {
-  let snapshotId = agent.id.toString() + '-' + timestamp.toString()
-  let snapshot = new MaturityScoreSnapshot(snapshotId)
-  snapshot.agent = agent.id
-  snapshot.timestamp = timestamp
-  snapshot.score = newScore
-  snapshot.blockNumber = blockNumber
-  
-  // Calculate growth rate from previous score
-  let growthRate = ZERO_BD
-  if (agent.maturityScore.gt(ZERO_BI)) {
-    let scoreDiff = newScore.minus(agent.maturityScore).toBigDecimal()
-    growthRate = scoreDiff.times(HUNDRED_BD).div(agent.maturityScore.toBigDecimal())
+function sqrt(value: BigDecimal): BigDecimal {
+  if (value.lt(ZERO_BD)) {
+    return ZERO_BD
   }
-  snapshot.growthRate = growthRate
+  
+  let n = value.truncate(0)
+  if (n.equals(ZERO_BD)) {
+    return ZERO_BD
+  }
+  
+  let x = BigDecimal.fromString(n.toString())
+  let y = value.div(x).plus(x).div(BigDecimal.fromString('2'))
+  
+  while (y.lt(x)) {
+    x = y
+    y = value.div(x).plus(x).div(BigDecimal.fromString('2'))
+  }
+  
+  return x
+}
+
+function calculateMarketHealthScore(agent: Agent): BigDecimal {
+  let priceStabilityWeight = BigDecimal.fromString('0.3')
+  let liquidityDepthWeight = BigDecimal.fromString('0.2')
+  let validatorParticipationWeight = BigDecimal.fromString('0.2')
+  let stakingEfficiencyWeight = BigDecimal.fromString('0.15')
+  let serviceSuccessWeight = BigDecimal.fromString('0.15')
+
+  let priceStability = agent.marketStability
+  let liquidityDepth = agent.liquidityProviderCount.toBigDecimal()
+  let validatorParticipation = agent.activeValidatorCount.toBigDecimal().div(agent.validatorCount.toBigDecimal())
+  let stakingEfficiency = agent.stakingAPY.div(HUNDRED_BD)
+  let serviceSuccess = agent.serviceSuccessRate.div(HUNDRED_BD)
+
+  return priceStability.times(priceStabilityWeight)
+    .plus(liquidityDepth.times(liquidityDepthWeight))
+    .plus(validatorParticipation.times(validatorParticipationWeight))
+    .plus(stakingEfficiency.times(stakingEfficiencyWeight))
+    .plus(serviceSuccess.times(serviceSuccessWeight))
+}
+
+function calculateNetworkGrowthContribution(agent: Agent): BigDecimal {
+  let stakingWeight = BigDecimal.fromString('0.4')
+  let validatorWeight = BigDecimal.fromString('0.3')
+  let serviceWeight = BigDecimal.fromString('0.3')
+
+  let stakingGrowth = agent.stakingGrowthRate.div(HUNDRED_BD)
+  let validatorGrowth = agent.validatorCount.toBigDecimal().div(BigDecimal.fromString('100'))
+  let serviceGrowth = agent.serviceCount.toBigDecimal().div(BigDecimal.fromString('100'))
+
+  return stakingGrowth.times(stakingWeight)
+    .plus(validatorGrowth.times(validatorWeight))
+    .plus(serviceGrowth.times(serviceWeight))
+}
+
+function predictGraduation(agent: Agent): GraduationPrediction {
+  let id = agent.id.toString() + '-' + agent.lastRankUpdate.toString()
+  let prediction = new GraduationPrediction(id)
+  prediction.agent = agent.id
+  prediction.networkMetrics = agent.id
+  
+  let timeSinceCreation = agent.lastRankUpdate.minus(agent.createdAt)
+  let progressRate = agent.graduationProgress.div(timeSinceCreation.toBigDecimal())
+  
+  let remainingProgress = HUNDRED_BD.minus(agent.graduationProgress)
+  let estimatedRemainingTime = remainingProgress.div(progressRate)
+  
+  prediction.predictedGraduationTimestamp = agent.lastRankUpdate.plus(
+    BigInt.fromString(estimatedRemainingTime.truncate(0).toString())
+  )
+  
+  let confidenceFactors = [
+    agent.serviceSuccessRate.div(HUNDRED_BD),
+    agent.validatorSuccessRate.div(HUNDRED_BD),
+    agent.stakingGrowthRate.gt(ZERO_BD) ? BigDecimal.fromString('1') : ZERO_BD
+  ]
+  
+  let confidenceScore = ZERO_BD
+  for (let i = 0; i < confidenceFactors.length; i++) {
+    confidenceScore = confidenceScore.plus(confidenceFactors[i])
+  }
+  confidenceScore = confidenceScore.div(BigDecimal.fromString(confidenceFactors.length.toString()))
+  
+  prediction.confidenceScore = confidenceScore
+  prediction.currentProgress = agent.graduationProgress
+  prediction.progressRate = progressRate
+  prediction.factorsContributing = [
+    'Service Success Rate: ' + agent.serviceSuccessRate.toString(),
+    'Validator Success Rate: ' + agent.validatorSuccessRate.toString(),
+    'Staking Growth Rate: ' + agent.stakingGrowthRate.toString()
+  ]
+  
+  return prediction
+}
+
+function updateValidatorNetwork(validator: Validator, event: ethereum.Event): void {
+  let network = ValidatorNetwork.load(validator.id)
+  if (!network) {
+    network = new ValidatorNetwork(validator.id)
+    network.validator = validator.id
+    network.crossAgentValidations = 0
+    network.uniqueAgentsValidated = 0
+    network.specialization = []
+    network.validationSuccessRate = ZERO_BD
+    network.averageValidationImpact = ZERO_BD
+    network.networkInfluenceScore = ZERO_BD
+  }
+  
+  network.crossAgentValidations += 1
+  
+  if (validator.validationCount.gt(ZERO_BI)) {
+    network.validationSuccessRate = validator.score
+      .toBigDecimal()
+      .div(validator.validationCount.toBigDecimal())
+      .times(HUNDRED_BD)
+  }
+  
+  let agent = Agent.load(validator.agent)
+  if (agent && agent.validatorCount.gt(ZERO_BI)) {
+    network.networkInfluenceScore = validator.validationCount
+      .toBigDecimal()
+      .div(agent.validatorCount.toBigDecimal())
+      .times(HUNDRED_BD)
+  }
+  
+  network.lastUpdated = event.block.timestamp
+  network.save()
+}
+
+function createMarketHealthSnapshot(agent: Agent, event: ethereum.Event): void {
+  let snapshot = new MarketHealthSnapshot(
+    agent.id.toString() + '-' + event.block.timestamp.toString()
+  )
+  
+  snapshot.timestamp = event.block.timestamp
+  snapshot.agent = agent.id
+  
+  snapshot.priceStability = agent.marketStability
+  snapshot.liquidityDepth = agent.liquidityProviderCount.toBigDecimal()
+  snapshot.validatorParticipation = agent.activeValidatorCount
+    .toBigDecimal()
+    .div(agent.validatorCount.toBigDecimal())
+    .times(HUNDRED_BD)
+  snapshot.stakingEfficiency = agent.stakingAPY
+  snapshot.serviceSuccessRate = agent.serviceSuccessRate
+  
+  snapshot.overallHealthScore = calculateMarketHealthScore(agent)
+  snapshot.marketMaturityScore = agent.graduationProgress
+  snapshot.networkEffectScore = calculateNetworkGrowthContribution(agent)
+  
+  let economics = TokenEconomics.load(agent.token.toHexString())
+  if (economics) {
+    snapshot.volumeWeightedPrice = economics.volumeWeightedPrice
+    snapshot.largeTradeImpact = economics.tradeImpactAverage
+    snapshot.buyPressure = economics.tokenVelocity
+    snapshot.sellPressure = ZERO_BD
+  }
+  
   snapshot.save()
 }
 
-function updateTokenEconomics(
-  token: Bytes,
-  event: ethereum.Event,
-  priceImpact: BigDecimal,
-  liquidityChange: BigDecimal
-): void {
-  let economics = TokenEconomics.load(token.toHexString())
-  if (!economics) {
-    economics = new TokenEconomics(token.toHexString())
-    economics.token = token
-    economics.liquidityDepth = ZERO_BD
-    economics.liquidityUtilization = ZERO_BD
-    economics.tokenVelocity = ZERO_BD
-    economics.holdingTimeAverage = ZERO_BI
-    economics.rewardDistributionEfficiency = ZERO_BD
-    economics.stakingYield = ZERO_BD
-    economics.validatorYield = ZERO_BD
+function updateNetworkMetrics(event: ethereum.Event): void {
+  let id = event.block.timestamp.div(BigInt.fromI32(86400)).toString()
+  let metrics = NetworkMetrics.load(id)
+  if (!metrics) {
+    metrics = new NetworkMetrics(id)
+    metrics.newAgentsCount = 0
+    metrics.newValidatorsCount = 0
+    metrics.newServicesCount = 0
+    metrics.networkGrowthRate = ZERO_BD
+    metrics.marketHealthScore = ZERO_BD
+    metrics.validatorParticipationRate = ZERO_BD
+    metrics.averageValidationFrequency = ZERO_BD
+    metrics.totalVolumeUSD = ZERO_BD
+    metrics.volumeWeightedPrice = ZERO_BD
+    metrics.buyPressure = ZERO_BD
+    metrics.sellPressure = ZERO_BD
+    metrics.averageGraduationTime = ZERO_BI
   }
   
-  economics.updateTimestamp = event.block.timestamp
-  economics.liquidityDepth = economics.liquidityDepth.plus(liquidityChange)
-  // Update other economic metrics based on the event
-  economics.save()
+  metrics.timestamp = event.block.timestamp
   
-  // Create economic snapshot
-  let snapshotId = token.toHexString() + '-' + event.block.timestamp.toString()
-  let snapshot = new EconomicSnapshot(snapshotId)
-  snapshot.token = token
-  snapshot.timestamp = event.block.timestamp
-  snapshot.priceUSD = ZERO_BD // TODO: Get actual price
-  snapshot.liquidityDepth = economics.liquidityDepth
-  snapshot.tokenVelocity = economics.tokenVelocity
-  snapshot.rewardEfficiency = economics.rewardDistributionEfficiency
-  snapshot.triggerType = event.block.number.toString() + '-' + event.logIndex.toString()
-  snapshot.triggerAddress = event.transaction.from
-  snapshot.save()
+  let eventName = event.transaction.input.toString().slice(0, 10)
+  if (eventName == '0x3c797536') {
+    metrics.newAgentsCount += 1
+  } else if (eventName == '0x4d99dd16') {
+    metrics.newValidatorsCount += 1
+  } else if (eventName == '0x7f4ab1dd') {
+    metrics.newServicesCount += 1
+  }
+  
+  let prevMetrics = NetworkMetrics.load(
+    event.block.timestamp.minus(BigInt.fromI32(86400)).div(BigInt.fromI32(86400)).toString()
+  )
+  if (prevMetrics) {
+    let totalPrev = prevMetrics.newAgentsCount + prevMetrics.newValidatorsCount + prevMetrics.newServicesCount
+    let totalCurrent = metrics.newAgentsCount + metrics.newValidatorsCount + metrics.newServicesCount
+    
+    if (totalPrev > 0) {
+      metrics.networkGrowthRate = BigDecimal.fromString((totalCurrent - totalPrev).toString())
+        .div(BigDecimal.fromString(totalPrev.toString()))
+        .times(HUNDRED_BD)
+    }
+  }
+  
+  metrics.save()
 }
 
 export function handleAgentCreated(event: AgentCreated): void {
@@ -101,15 +255,11 @@ export function handleAgentCreated(event: AgentCreated): void {
   agent.totalStaked = ZERO_BD
   agent.uniqueStakers = ZERO_BI
   agent.stakingRewardsDistributed = ZERO_BD
-  
-  // Initialize performance fields
   agent.graduationProgress = ZERO_BD
   agent.serviceSuccessRate = ZERO_BD
   agent.performanceRank = ZERO_BI
   agent.lastRankUpdate = event.block.timestamp
   agent.servicesArray = []
-  
-  // Initialize additional analytics fields
   agent.averageStakeDuration = ZERO_BI
   agent.stakingAPY = ZERO_BD
   agent.validatorCount = ZERO_BI
@@ -118,63 +268,44 @@ export function handleAgentCreated(event: AgentCreated): void {
   agent.averageServiceImpact = ZERO_BD
   agent.lastServiceTimestamp = event.block.timestamp
   agent.contributionAcceptanceRate = ZERO_BD
+  agent.hourlyStakingYield = ZERO_BD
+  agent.dailyStakingYield = ZERO_BD
+  agent.weeklyStakingYield = ZERO_BD
+  agent.monthlyStakingYield = ZERO_BD
+  agent.serviceCount = ZERO_BI
+  agent.successfulServiceCount = ZERO_BI
+  agent.failedServiceCount = ZERO_BI
+  agent.averageServiceMaturityScore = ZERO_BD
+  agent.averageValidatorScore = ZERO_BD
+  agent.validatorSuccessRate = ZERO_BD
+  agent.totalValidations = ZERO_BI
+  agent.minStakeAmount = ZERO_BD
+  agent.maxStakeAmount = ZERO_BD
+  agent.medianStakeAmount = ZERO_BD
+  agent.stakingGrowthRate = ZERO_BD
+  agent.timeWeightedStake = ZERO_BD
+  agent.timeWeightedImpact = ZERO_BD
+  agent.stakeDistributionP25 = ZERO_BD
+  agent.stakeDistributionP50 = ZERO_BD
+  agent.stakeDistributionP75 = ZERO_BD
+  agent.stakeDistributionStdDev = ZERO_BD
+  agent.priceImpactScore = ZERO_BD
+  agent.marketStability = ZERO_BD
+  agent.liquidityProviderCount = ZERO_BI
+  agent.averageTradeImpact = ZERO_BD
+  agent.impactRank = ZERO_BI
+  agent.stakeRank = ZERO_BI
+  agent.rewardRank = ZERO_BI
+  agent.validatorRank = ZERO_BI
+  agent.marketHealthScore = ZERO_BD
+  agent.networkGrowthContribution = ZERO_BD
+  agent.predictedGraduationTimestamp = null
+  agent.graduationConfidence = ZERO_BD
+  
   agent.save()
   
-  // Create initial maturity score snapshot
-  createMaturityScoreSnapshot(agent, ZERO_BI, event.block.timestamp, event.block.number)
-
-  // Create initial day data
-  let dayID = agent.id.toString() + '-' + event.block.timestamp.toString()
-  let dayData = new AgentDayData(dayID)
-  dayData.agent = agent.id
-  dayData.date = event.block.timestamp
-  
-  // Initialize staking metrics
-  dayData.dailyStakeAmount = ZERO_BD
-  dayData.dailyUnstakeAmount = ZERO_BD
-  dayData.netStakingChange = ZERO_BD
-  dayData.uniqueDailyStakers = ZERO_BI
-  dayData.averageStakeSize = ZERO_BD
-  
-  // Initialize service metrics
-  dayData.newContributions = ZERO_BI
-  dayData.acceptedServices = ZERO_BI
-  dayData.dailyImpactScore = ZERO_BD
-  
-  // Initialize reward metrics
-  dayData.dailyRewardsGenerated = ZERO_BD
-  dayData.stakersRewards = ZERO_BD
-  dayData.validatorsRewards = ZERO_BD
-  dayData.contributorsRewards = ZERO_BD
-  dayData.protocolRewards = ZERO_BD
-  dayData.rewardPerStake = ZERO_BD
-  
-  // Initialize validator metrics
-  dayData.activeValidators = ZERO_BI
-  dayData.averageValidatorScore = ZERO_BD
-  dayData.validationsPerValidator = ZERO_BD
-  
-  // Initialize performance fields
-  dayData.maturityScoreChange = ZERO_BD
-  dayData.serviceSuccessCount = ZERO_BI
-  dayData.serviceFailureCount = ZERO_BI
-  dayData.dailySuccessRate = ZERO_BD
-  dayData.performanceScore = ZERO_BD
-  
-  // Initialize distribution metrics
-  dayData.stakeSizeDistribution = []
-  dayData.impactScoreDistribution = []
-  dayData.validatorScoreDistribution = []
-  dayData.save()
-}
-
-export function handleAgentGraduated(event: AgentGraduated): void {
-  let agent = Agent.load(event.params.virtualId.toString())
-  if (agent) {
-    agent.graduatedToUniswap = true
-    agent.graduationTimestamp = event.block.timestamp
-    agent.save()
-  }
+  createMarketHealthSnapshot(agent, event)
+  updateNetworkMetrics(event)
 }
 
 export function handleValidatorAdded(event: ValidatorAdded): void {
@@ -186,35 +317,13 @@ export function handleValidatorAdded(event: ValidatorAdded): void {
   validator.totalRewardsEarned = ZERO_BD
   validator.validationCount = ZERO_BI
   validator.lastActiveTimestamp = event.block.timestamp
+  validator.crossAgentPerformance = ZERO_BD
+  validator.specializationScore = ZERO_BD
+  
   validator.save()
-
-  // Update agent metrics
-  let agent = Agent.load(event.params.virtualId.toString())
-  if (agent) {
-    agent.validatorCount = agent.validatorCount.plus(ONE_BI)
-    agent.activeValidatorCount = agent.activeValidatorCount.plus(ONE_BI)
-    agent.save()
-  }
-
-  // Update agent day data
-  let dayID = event.params.virtualId.toString() + '-' + event.block.timestamp.toString()
-  let dayData = AgentDayData.load(dayID)
-  if (dayData) {
-    dayData.activeValidators = dayData.activeValidators.plus(ONE_BI)
-    
-    // Update validator score distribution
-    let scores = dayData.validatorScoreDistribution
-    scores.push(ZERO_BD)
-    dayData.validatorScoreDistribution = scores
-    
-    // Update validations per validator
-    if (dayData.activeValidators.gt(ZERO_BI)) {
-      dayData.validationsPerValidator = BigDecimal.fromString(dayData.serviceSuccessCount.toString())
-        .div(dayData.activeValidators.toBigDecimal())
-    }
-    
-    dayData.save()
-  }
+  
+  updateValidatorNetwork(validator, event)
+  updateNetworkMetrics(event)
 }
 
 export function handleValidatorScoreUpdated(event: ValidatorScoreUpdated): void {
@@ -225,46 +334,8 @@ export function handleValidatorScoreUpdated(event: ValidatorScoreUpdated): void 
     validator.lastActiveTimestamp = event.block.timestamp
     validator.validationCount = validator.validationCount.plus(ONE_BI)
     validator.save()
-
-    // Update agent day data
-    let dayID = event.params.virtualId.toString() + '-' + event.block.timestamp.toString()
-    let dayData = AgentDayData.load(dayID)
-    if (dayData) {
-      // Update average validator score directly
-      dayData.averageValidatorScore = event.params.newScore.toBigDecimal()
-      
-      // Update validator score distribution
-      let scores = dayData.validatorScoreDistribution
-      scores.push(event.params.newScore.toBigDecimal())
-      dayData.validatorScoreDistribution = scores
-      
-      dayData.save()
-    }
-  }
-}
-
-export function handleContributionSubmitted(event: ContributionSubmitted): void {
-  let contributionID = event.params.contributionId.toString()
-  let contribution = new Contribution(contributionID)
-  contribution.agent = event.params.virtualId.toString()
-  contribution.contributor = event.params.contributor
-  contribution.coreType = event.params.coreType
-  contribution.timestamp = event.block.timestamp
-  contribution.accepted = false
-  
-  // Handle parent contribution if exists
-  if (event.params.parentContributionId) {
-    contribution.parentContribution = event.params.parentContributionId.toString()
-  }
-  
-  contribution.save()
-
-  // Update day data
-  let dayID = event.params.virtualId.toString() + '-' + event.block.timestamp.toString()
-  let dayData = AgentDayData.load(dayID)
-  if (dayData) {
-    dayData.newContributions = dayData.newContributions.plus(ONE_BI)
-    dayData.save()
+    
+    updateValidatorNetwork(validator, event)
   }
 }
 
@@ -273,109 +344,68 @@ export function handleServiceAccepted(event: ServiceAccepted): void {
   let contributionID = event.params.contributionId.toString()
   let agentID = event.params.virtualId.toString()
   
-  // Load agent first
   let agent = Agent.load(agentID)
-  if (!agent) {
-    return
-  }
-
-  let service = new Service(serviceID)
-  service.agent = agentID
-  service.contribution = contributionID
-  service.maturityScore = event.params.maturityScore
-  service.impact = event.params.impact.toBigDecimal()
-  service.coreType = event.params.coreType
-  service.timestamp = event.block.timestamp
-  service.rewardsGenerated = ZERO_BD
-  service.priceImpact = ZERO_BD
-  service.rewardEfficiency = ZERO_BD
-  service.liquidityEffect = ZERO_BD
-  service.token = agent.token
-  service.save()
-  
-  // Update agent's metrics
-  agent.totalServiceImpact = agent.totalServiceImpact.plus(service.impact)
-  agent.lastServiceTimestamp = event.block.timestamp
-  
-  // Calculate average service impact
-  let totalServices = BigInt.fromI32(agent.servicesArray.length)
-  if (totalServices.gt(ZERO_BI)) {
-    agent.averageServiceImpact = agent.totalServiceImpact.div(totalServices.toBigDecimal())
-  }
-  
-  // Add service to agent's services array
-  let services = agent.servicesArray
-  services.push(serviceID)
-  agent.servicesArray = services
-  
-  // Calculate service success rate based on impact threshold
-  let successCount = ZERO_BI
-  let totalCount = BigInt.fromI32(services.length)
-  
-  for (let i = 0; i < services.length; i++) {
-    let serviceEntity = Service.load(services[i])
-    if (serviceEntity && serviceEntity.impact.gt(ZERO_BD)) {
-      successCount = successCount.plus(ONE_BI)
+  if (agent) {
+    let service = new Service(serviceID)
+    service.agent = agentID
+    service.contribution = contributionID
+    service.maturityScore = event.params.maturityScore
+    service.impact = event.params.impact.toBigDecimal()
+    service.coreType = event.params.coreType
+    service.timestamp = event.block.timestamp
+    service.rewardsGenerated = ZERO_BD
+    service.priceImpact = event.params.impact.toBigDecimal().div(HUNDRED_BD)
+    service.rewardEfficiency = ZERO_BD
+    service.liquidityEffect = ZERO_BD
+    service.token = agent.token
+    service.save()
+    
+    agent.totalServiceImpact = agent.totalServiceImpact.plus(service.impact)
+    agent.lastServiceTimestamp = event.block.timestamp
+    agent.serviceCount = agent.serviceCount.plus(ONE_BI)
+    
+    if (service.impact.gt(ZERO_BD)) {
+      agent.successfulServiceCount = agent.successfulServiceCount.plus(ONE_BI)
+    } else {
+      agent.failedServiceCount = agent.failedServiceCount.plus(ONE_BI)
     }
-  }
-  
-  if (totalCount.gt(ZERO_BI)) {
-    agent.serviceSuccessRate = successCount.toBigDecimal()
-      .div(totalCount.toBigDecimal())
-      .times(HUNDRED_BD)
-  }
-  
-  // Update graduation progress (example calculation)
-  let graduationThreshold = BigInt.fromI32(100) // Example threshold
-  agent.graduationProgress = agent.maturityScore.toBigDecimal()
-    .div(graduationThreshold.toBigDecimal())
-    .times(HUNDRED_BD)
-  
-  agent.save()
-
-  // Update contribution
-  let contribution = Contribution.load(contributionID)
-  if (contribution) {
-    contribution.accepted = true
-    contribution.service = serviceID
-    contribution.save()
-  }
-
-  // Update day data with new performance fields
-  let dayID = agent.id.toString() + '-' + event.block.timestamp.toString()
-  let dayData = AgentDayData.load(dayID)
-  if (dayData) {
-    dayData.acceptedServices = dayData.acceptedServices.plus(ONE_BI)
-    dayData.dailyImpactScore = dayData.dailyImpactScore.plus(event.params.impact.toBigDecimal())
-    dayData.serviceSuccessCount = dayData.serviceSuccessCount.plus(ONE_BI)
-    dayData.dailySuccessRate = dayData.serviceSuccessCount
-      .toBigDecimal()
-      .div(dayData.acceptedServices.toBigDecimal())
+    
+    let totalServices = BigInt.fromI32(agent.servicesArray.length)
+    if (totalServices.gt(ZERO_BI)) {
+      agent.averageServiceImpact = agent.totalServiceImpact.div(totalServices.toBigDecimal())
+      agent.averageServiceMaturityScore = BigDecimal.fromString(agent.maturityScore.toString())
+        .div(totalServices.toBigDecimal())
+    }
+    
+    let services = agent.servicesArray
+    services.push(serviceID)
+    agent.servicesArray = services
+    
+    if (agent.serviceCount.gt(ZERO_BI)) {
+      agent.serviceSuccessRate = agent.successfulServiceCount
+        .toBigDecimal()
+        .div(agent.serviceCount.toBigDecimal())
+        .times(HUNDRED_BD)
+    }
+    
+    let graduationThreshold = BigInt.fromI32(100)
+    agent.graduationProgress = agent.maturityScore.toBigDecimal()
+      .div(graduationThreshold.toBigDecimal())
       .times(HUNDRED_BD)
     
-    // Calculate performance score based on impact and success rate
-    dayData.performanceScore = dayData.dailyImpactScore
-      .times(dayData.dailySuccessRate)
-      .div(HUNDRED_BD)
+    agent.marketHealthScore = calculateMarketHealthScore(agent)
+    agent.networkGrowthContribution = calculateNetworkGrowthContribution(agent)
     
-    // Update impact score distribution
-    let impacts = dayData.impactScoreDistribution
-    impacts.push(service.impact)
-    dayData.impactScoreDistribution = impacts
+    let prediction = predictGraduation(agent)
+    agent.predictedGraduationTimestamp = prediction.predictedGraduationTimestamp
+    agent.graduationConfidence = prediction.confidenceScore
     
-    dayData.save()
+    agent.save()
+    prediction.save()
+    
+    createMarketHealthSnapshot(agent, event)
+    updateNetworkMetrics(event)
   }
-  
-  // Update token economics
-  let priceImpact = event.params.impact.toBigDecimal().div(HUNDRED_BD)
-  let liquidityEffect = ZERO_BD // Calculate based on your requirements
-  
-  updateTokenEconomics(
-    agent.token,
-    event,
-    priceImpact,
-    liquidityEffect
-  )
 }
 
 export function handleStakeUpdated(event: StakeUpdated): void {
@@ -385,53 +415,47 @@ export function handleStakeUpdated(event: StakeUpdated): void {
     agent.totalStaked = event.params.newStake.toBigDecimal()
     agent.uniqueStakers = event.params.uniqueStakers
     
-    // Calculate APY if we have rewards distributed
     if (agent.stakingRewardsDistributed.gt(ZERO_BD) && agent.totalStaked.gt(ZERO_BD)) {
       let timeSinceCreation = event.block.timestamp.minus(agent.createdAt)
       let annualizedRewards = agent.stakingRewardsDistributed
-        .times(BigDecimal.fromString('31536000')) // seconds in a year
+        .times(BigDecimal.fromString('31536000'))
         .div(timeSinceCreation.toBigDecimal())
       agent.stakingAPY = annualizedRewards.div(agent.totalStaked).times(HUNDRED_BD)
+      
+      agent.hourlyStakingYield = agent.stakingAPY.div(BigDecimal.fromString('8760'))
+      agent.dailyStakingYield = agent.stakingAPY.div(BigDecimal.fromString('365'))
+      agent.weeklyStakingYield = agent.stakingAPY.div(BigDecimal.fromString('52'))
+      agent.monthlyStakingYield = agent.stakingAPY.div(BigDecimal.fromString('12'))
     }
     
-    // Update stake duration
     if (oldStake.gt(ZERO_BD)) {
       let duration = event.block.timestamp.minus(agent.lastServiceTimestamp)
       agent.averageStakeDuration = duration
+      
+      let timeWeight = duration.toBigDecimal().div(BigDecimal.fromString('86400'))
+      agent.timeWeightedStake = agent.totalStaked.times(timeWeight)
     }
     
-    agent.save()
-
-    // Update day data
-    let dayID = agent.id.toString() + '-' + event.block.timestamp.toString()
-    let dayData = AgentDayData.load(dayID)
-    if (dayData) {
-      let stakeChange = event.params.newStake.toBigDecimal().minus(event.params.oldStake.toBigDecimal())
-      if (stakeChange.gt(ZERO_BD)) {
-        dayData.dailyStakeAmount = dayData.dailyStakeAmount.plus(stakeChange)
-      } else {
-        dayData.dailyUnstakeAmount = dayData.dailyUnstakeAmount.plus(ZERO_BD.minus(stakeChange))
-      }
-      dayData.netStakingChange = dayData.dailyStakeAmount.minus(dayData.dailyUnstakeAmount)
-      dayData.uniqueDailyStakers = event.params.uniqueStakers
-      
-      // Calculate average stake size
-      if (dayData.uniqueDailyStakers.gt(ZERO_BI)) {
-        dayData.averageStakeSize = agent.totalStaked.div(dayData.uniqueDailyStakers.toBigDecimal())
-      }
-      
-      // Calculate reward per stake
-      if (agent.totalStaked.gt(ZERO_BD)) {
-        dayData.rewardPerStake = dayData.dailyRewardsGenerated.div(agent.totalStaked)
-      }
-      
-      // Update stake size distribution
-      let stakeSizes = dayData.stakeSizeDistribution
-      stakeSizes.push(agent.totalStaked)
-      dayData.stakeSizeDistribution = stakeSizes
-      
-      dayData.save()
+    if (agent.minStakeAmount.equals(ZERO_BD) || agent.totalStaked.lt(agent.minStakeAmount)) {
+      agent.minStakeAmount = agent.totalStaked
     }
+    if (agent.totalStaked.gt(agent.maxStakeAmount)) {
+      agent.maxStakeAmount = agent.totalStaked
+    }
+    
+    if (oldStake.gt(ZERO_BD)) {
+      agent.stakingGrowthRate = agent.totalStaked
+        .minus(oldStake)
+        .div(oldStake)
+        .times(HUNDRED_BD)
+    }
+    
+    agent.marketHealthScore = calculateMarketHealthScore(agent)
+    agent.networkGrowthContribution = calculateNetworkGrowthContribution(agent)
+    
+    agent.save()
+    
+    createMarketHealthSnapshot(agent, event)
   }
 }
 
@@ -439,31 +463,87 @@ export function handleRewardDistributed(event: RewardDistributed): void {
   let agent = Agent.load(event.params.virtualId.toString())
   if (agent) {
     agent.stakingRewardsDistributed = agent.stakingRewardsDistributed.plus(event.params.amount.toBigDecimal())
+    agent.marketHealthScore = calculateMarketHealthScore(agent)
     agent.save()
+    
+    createMarketHealthSnapshot(agent, event)
+  }
+}
 
-    // Update day data
-    let dayID = agent.id.toString() + '-' + event.block.timestamp.toString()
-    let dayData = AgentDayData.load(dayID)
-    if (dayData) {
-      dayData.dailyRewardsGenerated = dayData.dailyRewardsGenerated.plus(event.params.amount.toBigDecimal())
+export function handleAgentGraduated(event: AgentGraduated): void {
+  let agent = Agent.load(event.params.virtualId.toString())
+  if (agent) {
+    agent.graduatedToUniswap = true
+    agent.graduationTimestamp = event.block.timestamp
+    
+    let impact = new GraduationMarketImpact(agent.id)
+    impact.agent = agent.id
+    impact.graduationTimestamp = event.block.timestamp
+    impact.priceBeforeGraduation = ZERO_BD
+    impact.priceAfterGraduation = ZERO_BD
+    impact.volumeBeforeGraduation = ZERO_BD
+    impact.volumeAfterGraduation = ZERO_BD
+    impact.liquidityBeforeGraduation = ZERO_BD
+    impact.liquidityAfterGraduation = ZERO_BD
+    impact.stakingBehaviorChange = ZERO_BD
+    impact.validatorParticipationChange = ZERO_BD
+    impact.marketEfficiencyChange = ZERO_BD
+    
+    let economics = TokenEconomics.load(agent.token.toHexString())
+    if (economics) {
+      impact.priceBeforeGraduation = economics.volumeWeightedPrice
+      impact.volumeBeforeGraduation = economics.totalVolume
+      impact.liquidityBeforeGraduation = economics.liquidityDepth
       
-      // Update specific reward types based on recipient type
-      if (event.params.recipientType == 0) { // Stakers
-        dayData.stakersRewards = dayData.stakersRewards.plus(event.params.amount.toBigDecimal())
-      } else if (event.params.recipientType == 1) { // Validators
-        dayData.validatorsRewards = dayData.validatorsRewards.plus(event.params.amount.toBigDecimal())
-      } else if (event.params.recipientType == 2) { // Contributors
-        dayData.contributorsRewards = dayData.contributorsRewards.plus(event.params.amount.toBigDecimal())
-      } else if (event.params.recipientType == 3) { // Protocol
-        dayData.protocolRewards = dayData.protocolRewards.plus(event.params.amount.toBigDecimal())
-      }
-      
-      // Update reward per stake
       if (agent.totalStaked.gt(ZERO_BD)) {
-        dayData.rewardPerStake = dayData.dailyRewardsGenerated.div(agent.totalStaked)
+        impact.stakingBehaviorChange = agent.stakingGrowthRate
       }
       
-      dayData.save()
+      if (agent.validatorCount.gt(ZERO_BI)) {
+        impact.validatorParticipationChange = agent.activeValidatorCount
+          .toBigDecimal()
+          .div(agent.validatorCount.toBigDecimal())
+          .times(HUNDRED_BD)
+      }
+      
+      impact.marketEfficiencyChange = economics.marketEfficiency
     }
+    
+    impact.save()
+    agent.save()
+    
+    createMarketHealthSnapshot(agent, event)
+  }
+}
+
+export function handleContributionSubmitted(event: ContributionSubmitted): void {
+  let contributionID = event.params.contributionId.toString()
+  let agentID = event.params.virtualId.toString()
+  let parentID = event.params.parentContributionId.toString()
+  
+  let contribution = new Contribution(contributionID)
+  contribution.agent = agentID
+  contribution.contributor = event.params.contributor
+  contribution.coreType = event.params.coreType
+  contribution.timestamp = event.block.timestamp
+  contribution.accepted = false
+  
+  if (parentID != '0') {
+    contribution.parentContribution = parentID
+  }
+  
+  contribution.save()
+  
+  let agent = Agent.load(agentID)
+  if (agent) {
+    let totalContributions = agent.servicesArray.length
+    if (totalContributions > 0) {
+      agent.contributionAcceptanceRate = agent.successfulServiceCount
+        .toBigDecimal()
+        .div(BigInt.fromI32(totalContributions).toBigDecimal())
+        .times(HUNDRED_BD)
+    }
+    
+    agent.save()
   }
 }

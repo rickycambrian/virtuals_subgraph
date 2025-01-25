@@ -35,30 +35,57 @@ Single page application to show analytics from virtuals subgraph: https://thegra
    - Active Validators Count
    - Total Services Count
    - Average Maturity Score
+   - Market Health Score
+   - Network Growth Rate
 
-2. Agent Performance Section
+2. Rankings & Leaderboards Section
+   - Top Agents by Impact
+   - Top Agents by Stake
+   - Top Agents by Rewards
+   - Top Agents by Validator Network
+   - Core-specific Performance Leaders
+   - Rank Change Indicators
+   - Historical Rank Trends
+
+3. Market Impact Analysis Section
+   - Price Impact Visualization
+   - Liquidity Provider Behavior
+   - Graduation Event Analysis
+   - Market Stability Metrics
+   - Token Velocity Trends
+   - Trading Volume Analysis
+
+4. Agent Performance Section
    - Agent Growth Chart (new agents over time)
    - Graduation Rate Chart
    - Top Performing Agents Table
    - Maturity Score Distribution
+   - Core Type Performance Matrix
+   - Historical Rank Changes
 
-3. Validator Analytics Section
+5. Validator Analytics Section
    - Validator Activity Heatmap
    - Top Validators by Score
    - Validation Distribution by Core Type
    - Validator Rewards Chart
+   - Network Effect Analysis
+   - Cross-Agent Validation Patterns
 
-4. Contribution & Service Metrics
+6. Contribution & Service Metrics
    - Service Acceptance Rate Chart
    - Impact Score Distribution
    - Core Type Distribution
    - Contribution Relationship Graph
+   - Market Impact Correlation
+   - Service Success Patterns
 
-5. Staking Analytics
+7. Staking Analytics
    - TVL Growth Chart
    - Staker Distribution
    - Reward APY Chart
    - Staking Duration Distribution
+   - Stake Concentration Analysis
+   - LP Behavior Metrics
 
 ### Detailed Views
 
@@ -67,22 +94,31 @@ Single page application to show analytics from virtuals subgraph: https://thegra
   - Basic Info (ID, Creation Date, Status)
   - Performance Metrics
   - Graduation Progress
+  - Global & Core-specific Rankings
+  - Market Impact Scores
 - Staking History
 - Service History
 - Validator Activity
 - Reward Distribution
+- Price Impact Analysis
+- Liquidity Provider Stats
 
 #### Validator Analytics Page
 - Performance Metrics
 - Validation History
 - Reward History
 - Agent Distribution
+- Cross-Agent Analysis
+- Network Effect Metrics
+- Specialization Scores
 
 #### Services Dashboard
 - Service Impact Matrix
 - Core Type Performance
 - Contribution Flow
 - Acceptance Metrics
+- Market Impact Analysis
+- Price-Impact Correlation
 
 ## Example Queries
 
@@ -94,6 +130,8 @@ query GlobalStats($timeRange: Int!) {
     graduatedCount: graduatedToUniswap
     totalStaked
     stakingRewardsDistributed
+    marketHealthScore: priceImpactScore
+    networkGrowth: stakingGrowthRate
   }
   validators {
     totalCount: id
@@ -102,6 +140,66 @@ query GlobalStats($timeRange: Int!) {
   services {
     totalCount: id
     averageImpact
+  }
+}
+```
+
+### Rankings Query
+```graphql
+query AgentRankings($timeRange: Int!) {
+  agents(
+    where: { createdAt_gt: $timeRange }
+    orderBy: performanceRank
+    orderDirection: asc
+  ) {
+    id
+    virtualId
+    impactRank
+    stakeRank
+    rewardRank
+    validatorRank
+    priceImpactScore
+    marketStability
+    historicalRanks(first: 30, orderBy: timestamp, orderDirection: desc) {
+      timestamp
+      impactRank
+      stakeRank
+      rewardRank
+      totalRank
+    }
+    coreTypeRanks {
+      coreType
+      rank
+      score
+      successRate
+    }
+  }
+}
+```
+
+### Market Impact Query
+```graphql
+query MarketImpactMetrics($timeRange: Int!) {
+  agents(where: { graduatedToUniswap: true }) {
+    id
+    priceImpactScore
+    marketStability
+    liquidityProviderCount
+    averageTradeImpact
+    postGraduationMetrics {
+      priceBeforeGraduation
+      priceAfterGraduation
+      volumeBeforeGraduation
+      volumeAfterGraduation
+      marketEfficiencyChange
+    }
+  }
+  tokenEconomics {
+    priceStability
+    liquidityProviderConcentration
+    tradeImpactAverage
+    marketMaturityScore
+    stakingEfficiency
   }
 }
 ```
@@ -120,15 +218,23 @@ query AgentPerformance($timeRange: Int!) {
     maturityScore
     totalStaked
     stakingRewardsDistributed
+    priceImpactScore
+    marketStability
     services {
       id
       impact
       maturityScore
+      priceImpact
+      liquidityEffect
     }
     validators {
       id
       score
       validationCount
+    }
+    historicalRanks {
+      timestamp
+      totalRank
     }
   }
 }
@@ -151,6 +257,8 @@ query ValidatorMetrics($timeRange: Int!) {
       id
       virtualId
       graduatedToUniswap
+      validatorRank
+      marketStability
     }
   }
 }
@@ -169,10 +277,14 @@ query ServiceMetrics($timeRange: Int!) {
     impact
     coreType
     rewardsGenerated
+    priceImpact
+    liquidityEffect
     agent {
       id
       virtualId
       graduatedToUniswap
+      priceImpactScore
+      marketStability
     }
     contribution {
       id
@@ -209,6 +321,7 @@ query DailyMetrics($timeRange: Int!) {
     protocolRewards
     activeValidators
     averageValidatorScore
+    performanceScore
   }
 }
 ```
@@ -221,35 +334,47 @@ query DailyMetrics($timeRange: Int!) {
    - TVL Area Chart
    - Reward Distribution Stacked Area Chart
    - Validation Activity Line Chart
+   - Price Impact Timeline
+   - Rank Change History
 
 2. Distribution Charts
    - Maturity Score Distribution Histogram
    - Stake Size Distribution Bar Chart
    - Core Type Distribution Pie Chart
    - Impact Score Box Plot
+   - Market Impact Distribution
+   - Rank Distribution
 
 3. Relationship Charts
    - Contribution Network Graph
    - Validator-Agent Relationship Chord Diagram
    - Service Impact Heat Map
    - Graduation Progress Gauge Chart
+   - Price-Impact Correlation Matrix
+   - Cross-Agent Validation Network
 
 ### Tables
 1. Agent Table
-   - Columns: ID, Status, TVL, Rewards, Services, Validators
+   - Columns: ID, Status, TVL, Rewards, Services, Validators, Rankings
    - Sortable by any column
    - Filterable by status and metrics
    - Expandable rows for details
+   - Rank change indicators
+   - Market impact metrics
 
 2. Validator Table
-   - Columns: Address, Score, Validations, Rewards, Active Agents
+   - Columns: Address, Score, Validations, Rewards, Active Agents, Network Effect
    - Performance trend sparklines
    - Filter by activity status
+   - Cross-agent validation stats
+   - Specialization indicators
 
 3. Service Table
-   - Columns: ID, Core Type, Impact, Maturity Score, Agent
+   - Columns: ID, Core Type, Impact, Maturity Score, Agent, Market Impact
    - Impact score color coding
    - Filter by core type
+   - Price impact visualization
+   - Liquidity effect metrics
 
 ## Interactive Features
 
@@ -259,27 +384,37 @@ query DailyMetrics($timeRange: Int!) {
    - Agent Status Filter
    - Core Type Filter
    - Minimum TVL Filter
+   - Rank Range Filter
+   - Market Impact Threshold
 
 2. Chart-Specific Filters
    - Metric Selection
    - Aggregation Period
    - Display Type Toggle
+   - Ranking Factor Weights
+   - Impact Type Selection
 
 ### User Interactions
 1. Drill-Down Capabilities
    - Click-through from overview to details
    - Expandable chart data points
    - Contextual tooltips
+   - Rank history exploration
+   - Market impact analysis
 
 2. Data Export
    - CSV export for all tables
    - Chart image download
    - API query copying
+   - Rank history export
+   - Market impact reports
 
 3. View Customization
    - Chart type switching
    - Metric comparison overlay
    - Custom time range selection
+   - Ranking factor adjustment
+   - Impact visualization options
 
 ## Performance Considerations
 
@@ -288,18 +423,24 @@ query DailyMetrics($timeRange: Int!) {
 - Use GraphQL fragments for efficient querying
 - Cache frequently accessed data
 - Implement loading states and placeholders
+- Optimize ranking calculations
+- Batch market impact updates
 
 ### Optimization
 - Lazy load components and routes
 - Memoize expensive calculations
 - Debounce real-time updates
 - Implement virtual scrolling for long lists
+- Efficient rank history storage
+- Optimized market impact computations
 
 ### Error Handling
 - Graceful fallbacks for failed queries
 - Clear error messages
 - Automatic retry logic
 - Data validation
+- Rank calculation verification
+- Market impact data integrity checks
 
 ## Future Enhancements
 
@@ -309,15 +450,21 @@ query DailyMetrics($timeRange: Int!) {
    - Validator performance scoring
    - Impact score forecasting
    - Network health indicators
+   - Rank prediction algorithms
+   - Market impact forecasting
 
 2. User Features
    - Custom dashboard layouts
    - Saved filters and views
    - Email reports and alerts
    - API key management
+   - Rank change notifications
+   - Market impact alerts
 
 3. Integration Features
    - Uniswap pool performance integration
    - Cross-chain analytics
    - Wallet integration
    - Social sharing capabilities
+   - Ranking system API
+   - Market impact analysis API

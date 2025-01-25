@@ -174,6 +174,23 @@ type Agent @entity {
   lastRankUpdate: BigInt!
   servicesArray: [String!]! # Store service IDs as strings
   
+  # Global Rankings
+  impactRank: BigInt!
+  stakeRank: BigInt!
+  rewardRank: BigInt!
+  validatorRank: BigInt!
+  historicalRanks: [RankSnapshot!]! @derivedFrom(field: "agent")
+  
+  # Core-specific Rankings
+  coreTypeRanks: [CoreTypeRank!]! @derivedFrom(field: "agent")
+  
+  # Market Impact Metrics
+  priceImpactScore: BigDecimal!
+  marketStability: BigDecimal!
+  liquidityProviderCount: BigInt!
+  averageTradeImpact: BigDecimal!
+  postGraduationMetrics: GraduationMarketImpact
+  
   # Additional Analytics Fields
   averageStakeDuration: BigInt!
   stakingAPY: BigDecimal!
@@ -184,12 +201,53 @@ type Agent @entity {
   lastServiceTimestamp: BigInt!
   contributionAcceptanceRate: BigDecimal!
   
+  # Pre-calculated Performance Metrics
+  hourlyStakingYield: BigDecimal!
+  dailyStakingYield: BigDecimal!
+  weeklyStakingYield: BigDecimal!
+  monthlyStakingYield: BigDecimal!
+  
+  # Service Performance
+  serviceCount: BigInt!
+  successfulServiceCount: BigInt!
+  failedServiceCount: BigInt!
+  averageServiceMaturityScore: BigDecimal!
+  
+  # Validator Performance
+  averageValidatorScore: BigDecimal!
+  validatorSuccessRate: BigDecimal!
+  totalValidations: BigInt!
+  
+  # Staking Metrics
+  minStakeAmount: BigDecimal!
+  maxStakeAmount: BigDecimal!
+  medianStakeAmount: BigDecimal!
+  stakingGrowthRate: BigDecimal!
+  
+  # Time-weighted Metrics
+  timeWeightedStake: BigDecimal!
+  timeWeightedImpact: BigDecimal!
+  
+  # Distribution Statistics
+  stakeDistributionP25: BigDecimal! # 25th percentile
+  stakeDistributionP50: BigDecimal! # Median
+  stakeDistributionP75: BigDecimal! # 75th percentile
+  stakeDistributionStdDev: BigDecimal!
+  
+  # New fields for enhanced analytics
+  marketHealthScore: BigDecimal!
+  networkGrowthContribution: BigDecimal!
+  predictedGraduationTimestamp: BigInt
+  graduationConfidence: BigDecimal!
+  
   # Relationships
   validators: [Validator!]! @derivedFrom(field: "agent")
   contributions: [Contribution!]! @derivedFrom(field: "agent")
   services: [Service!]! @derivedFrom(field: "agent")
   dailySnapshots: [AgentDayData!]! @derivedFrom(field: "agent")
   historicalMaturityScores: [MaturityScoreSnapshot!]! @derivedFrom(field: "agent")
+  marketHealthHistory: [MarketHealthSnapshot!]! @derivedFrom(field: "agent")
+  graduationPredictions: [GraduationPrediction!]! @derivedFrom(field: "agent")
 }
 
 type MaturityScoreSnapshot @entity(immutable: true) {
@@ -209,6 +267,11 @@ type Validator @entity {
   totalRewardsEarned: BigDecimal!
   validationCount: BigInt!
   lastActiveTimestamp: BigInt!
+  
+  # New fields for enhanced analytics
+  networkMetrics: ValidatorNetwork! @derivedFrom(field: "validator")
+  crossAgentPerformance: BigDecimal!
+  specializationScore: BigDecimal!
 }
 
 type Contribution @entity {
@@ -233,11 +296,50 @@ type Service @entity {
   timestamp: BigInt!
   rewardsGenerated: BigDecimal!
   
-  # New Economic Impact Fields
+  # Economic Impact Fields
   priceImpact: BigDecimal!
   rewardEfficiency: BigDecimal!
   liquidityEffect: BigDecimal!
   token: Bytes # Store the token address
+}
+
+type RankSnapshot @entity(immutable: true) {
+  id: ID! # Concatenated agent ID and timestamp
+  agent: Agent!
+  timestamp: BigInt!
+  impactRank: BigInt!
+  stakeRank: BigInt!
+  rewardRank: BigInt!
+  validatorRank: BigInt!
+  totalRank: BigInt! # Combined ranking score
+  rankingFactors: [BigDecimal!]! # Weights used for ranking
+}
+
+type CoreTypeRank @entity {
+  id: ID! # Concatenated agent ID and core type
+  agent: Agent!
+  coreType: Int!
+  rank: BigInt!
+  score: BigDecimal!
+  totalServices: BigInt!
+  successRate: BigDecimal!
+  averageImpact: BigDecimal!
+  lastUpdated: BigInt!
+}
+
+type GraduationMarketImpact @entity {
+  id: ID!
+  agent: Agent!
+  graduationTimestamp: BigInt!
+  priceBeforeGraduation: BigDecimal!
+  priceAfterGraduation: BigDecimal!
+  volumeBeforeGraduation: BigDecimal!
+  volumeAfterGraduation: BigDecimal!
+  liquidityBeforeGraduation: BigDecimal!
+  liquidityAfterGraduation: BigDecimal!
+  stakingBehaviorChange: BigDecimal!
+  validatorParticipationChange: BigDecimal!
+  marketEfficiencyChange: BigDecimal!
 }
 
 type TokenEconomics @entity {
@@ -257,17 +359,49 @@ type TokenEconomics @entity {
   rewardDistributionEfficiency: BigDecimal!
   stakingYield: BigDecimal!
   validatorYield: BigDecimal!
+  
+  # Pre-calculated Statistics
+  liquidityScore: BigDecimal!
+  marketEfficiency: BigDecimal!
+  volumeWeightedPrice: BigDecimal!
+  
+  # Time-series Metrics
+  hourlyVolumeAverage: BigDecimal!
+  dailyVolumeAverage: BigDecimal!
+  weeklyVolumeAverage: BigDecimal!
+  
+  # Running Totals
+  totalTransactions: BigInt!
+  totalVolume: BigDecimal!
+  totalRewardsDistributed: BigDecimal!
+  
+  # Market Impact Metrics
+  priceStability: BigDecimal!
+  liquidityProviderConcentration: BigDecimal!
+  tradeImpactAverage: BigDecimal!
+  marketMaturityScore: BigDecimal!
+  stakingEfficiency: BigDecimal!
 }
 
 type EconomicSnapshot @entity(immutable: true) {
   id: ID!
   token: Bytes!
   timestamp: BigInt!
+  dayNumber: Int! # Days since epoch for easier querying
   
   priceUSD: BigDecimal!
   liquidityDepth: BigDecimal!
   tokenVelocity: BigDecimal!
   rewardEfficiency: BigDecimal!
+  
+  # Pre-calculated Changes
+  priceChangePercent: BigDecimal!
+  liquidityChangePercent: BigDecimal!
+  velocityChangePercent: BigDecimal!
+  
+  # Running Totals
+  cumulativeVolume: BigDecimal!
+  cumulativeRewards: BigDecimal!
   
   triggerType: String!
   triggerAddress: Bytes!
@@ -277,6 +411,7 @@ type AgentDayData @entity {
   id: ID!
   agent: Agent!
   date: BigInt!
+  dayNumber: Int! # Days since epoch for easier querying
   
   # Staking metrics
   dailyStakeAmount: BigDecimal!
@@ -310,12 +445,111 @@ type AgentDayData @entity {
   dailySuccessRate: BigDecimal!
   performanceScore: BigDecimal!
   
-  # Distribution metrics
+  # Distribution Arrays
   stakeSizeDistribution: [BigDecimal!]!
   impactScoreDistribution: [BigDecimal!]!
   validatorScoreDistribution: [BigDecimal!]!
+  
+  # Pre-calculated Statistics
+  stakeSizeMin: BigDecimal!
+  stakeSizeMax: BigDecimal!
+  stakeSizeMedian: BigDecimal!
+  stakeSizeStdDev: BigDecimal!
+  
+  impactScoreMin: BigDecimal!
+  impactScoreMax: BigDecimal!
+  impactScoreMedian: BigDecimal!
+  impactScoreStdDev: BigDecimal!
+  
+  validatorScoreMin: BigDecimal!
+  validatorScoreMax: BigDecimal!
+  validatorScoreMedian: BigDecimal!
+  validatorScoreStdDev: BigDecimal!
+  
+  # Period-over-Period Changes
+  stakeChangePercent: BigDecimal!
+  impactChangePercent: BigDecimal!
+  rewardChangePercent: BigDecimal!
+  
+  # Running Totals
+  cumulativeStake: BigDecimal!
+  cumulativeRewards: BigDecimal!
+  cumulativeImpact: BigDecimal!
 }
 
+# New types for enhanced analytics
+type NetworkMetrics @entity {
+  id: ID!
+  timestamp: BigInt!
+  
+  # Growth Metrics
+  newAgentsCount: Int!
+  newValidatorsCount: Int!
+  newServicesCount: Int!
+  networkGrowthRate: BigDecimal!
+  
+  # Health Metrics
+  marketHealthScore: BigDecimal!
+  validatorParticipationRate: BigDecimal!
+  averageValidationFrequency: BigDecimal!
+  
+  # Volume Metrics
+  totalVolumeUSD: BigDecimal!
+  volumeWeightedPrice: BigDecimal!
+  buyPressure: BigDecimal!
+  sellPressure: BigDecimal!
+  
+  # Graduation Metrics
+  averageGraduationTime: BigInt!
+  graduationPredictions: [GraduationPrediction!]! @derivedFrom(field: "networkMetrics")
+}
+
+type GraduationPrediction @entity {
+  id: ID!
+  networkMetrics: NetworkMetrics!
+  agent: Agent!
+  predictedGraduationTimestamp: BigInt!
+  confidenceScore: BigDecimal!
+  currentProgress: BigDecimal!
+  progressRate: BigDecimal!
+  factorsContributing: [String!]!
+}
+
+type ValidatorNetwork @entity {
+  id: ID!
+  validator: Validator!
+  crossAgentValidations: Int!
+  uniqueAgentsValidated: Int!
+  specialization: [Int!]! # Core types specialized in
+  validationSuccessRate: BigDecimal!
+  averageValidationImpact: BigDecimal!
+  networkInfluenceScore: BigDecimal!
+  lastUpdated: BigInt!
+}
+
+type MarketHealthSnapshot @entity(immutable: true) {
+  id: ID!
+  timestamp: BigInt!
+  agent: Agent!
+  
+  # Market Health Components
+  priceStability: BigDecimal!
+  liquidityDepth: BigDecimal!
+  validatorParticipation: BigDecimal!
+  stakingEfficiency: BigDecimal!
+  serviceSuccessRate: BigDecimal!
+  
+  # Composite Scores
+  overallHealthScore: BigDecimal!
+  marketMaturityScore: BigDecimal!
+  networkEffectScore: BigDecimal!
+  
+  # Trading Metrics
+  volumeWeightedPrice: BigDecimal!
+  largeTradeImpact: BigDecimal!
+  buyPressure: BigDecimal!
+  sellPressure: BigDecimal!
+}
 
 type _Schema_
 @fulltext(

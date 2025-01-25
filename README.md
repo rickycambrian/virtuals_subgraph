@@ -11,6 +11,11 @@ This subgraph indexes token launches and trading activity from the Virtuals Prot
 - IPFS on Ethereum contracts support
 - Automatic data pruning
 - Comprehensive trading analytics and market statistics
+- Global and core-specific agent rankings
+- Market impact analysis and graduation effects
+- Cross-agent analytics and network effects
+- Advanced validator network analysis
+- Risk metrics and stability indicators
 
 ## Schema
 
@@ -28,12 +33,33 @@ The subgraph tracks the following data:
 - Comprehensive daily statistics
 - Per-trader analytics
 
-### Detailed Analytics
-- Price metrics (VWAP, volatility, trends)
-- Volume analysis (distribution, large trades)
-- Market health indicators (liquidity, efficiency)
-- Trader behavior (profitability, patterns)
-- Peak trading hours tracking
+### Agent Rankings & Performance
+- Global rankings (impact, stake, rewards)
+- Core-specific performance metrics
+- Historical rank tracking
+- Market impact scores
+- Network effect measurements
+
+### Market Impact Analysis
+- Price impact correlation
+- Graduation event effects
+- Liquidity provider behavior
+- Market stability metrics
+- Token velocity analysis
+
+### Validator Network Analysis
+- Cross-agent validation patterns
+- Validator specialization metrics
+- Network effect measurements
+- Performance correlation data
+- Reliability indicators
+
+### Risk Metrics
+- Agent stability scores
+- Validator reliability indices
+- Stake concentration analysis
+- Market health indicators
+- Liquidity risk metrics
 
 ## Example Queries
 
@@ -57,6 +83,54 @@ The subgraph tracks the following data:
     purchaseAmount
     createdAtBlock
     timestamp
+  }
+}
+```
+
+### Get Agent Rankings
+
+```graphql
+{
+  agents(
+    first: 10,
+    orderBy: performanceRank,
+    orderDirection: asc
+  ) {
+    id
+    virtualId
+    impactRank
+    stakeRank
+    rewardRank
+    validatorRank
+    priceImpactScore
+    marketStability
+    historicalRanks(first: 30) {
+      timestamp
+      totalRank
+    }
+    coreTypeRanks {
+      coreType
+      rank
+      score
+    }
+  }
+}
+```
+
+### Get Market Impact Analysis
+
+```graphql
+{
+  agents(where: { graduatedToUniswap: true }) {
+    id
+    priceImpactScore
+    marketStability
+    liquidityProviderCount
+    postGraduationMetrics {
+      priceBeforeGraduation
+      priceAfterGraduation
+      marketEfficiencyChange
+    }
   }
 }
 ```
@@ -172,7 +246,7 @@ When prompted for a version label, use semantic versioning (e.g., "1.0.0")
 
 1. Modify the schema in `schema.graphql`
 2. Update the subgraph manifest in `subgraph.yaml`
-3. Update the mappings in `src/virtuals-protocol.ts`
+3. Update the mappings in `src/mappings/agent.ts`
 4. Regenerate types:
 ```bash
 yarn codegen
@@ -194,3 +268,7 @@ graph deploy virtuals-tokens
 - Includes detailed market health metrics and trader performance analytics
 - Tracks daily statistics and peak trading hours for market analysis
 - Provides advanced analytics like price impact, market efficiency, and trader profitability
+- Implements global and core-specific agent rankings
+- Tracks market impact and graduation effects
+- Analyzes validator network patterns and specialization
+- Monitors risk metrics and market stability indicators

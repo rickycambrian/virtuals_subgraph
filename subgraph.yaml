@@ -84,13 +84,16 @@ templates:
       language: wasm/assemblyscript
       entities:
         - Swap
+        - TokenEconomics
+        - EconomicSnapshot
+        - Agent
       abis:
         - name: VirtualsPair
           file: ./abis/VirtualsPair.json
       eventHandlers:
         - event: Swap(uint256,uint256,uint256,uint256)
           handler: handleSwap
-      file: ./src/virtuals-pair.ts
+      file: ./src/mappings/pair.ts
 
   - kind: ethereum
     name: ERC20

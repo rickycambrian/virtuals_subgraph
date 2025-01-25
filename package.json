@@ -1,17 +1,17 @@
 {
-  "name": "virtuals-tokens",
+  "name": "virtuals-subgraph",
   "license": "UNLICENSED",
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy": "graph deploy --node https://api.studio.thegraph.com/deploy/ riccardoesclapon/virtuals-tokens",
-    "create-local": "graph create --node http://localhost:8020/ riccardoesclapon/virtuals-tokens",
-    "remove-local": "graph remove --node http://localhost:8020/ riccardoesclapon/virtuals-tokens",
-    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 riccardoesclapon/virtuals-tokens",
+    "deploy": "graph deploy --node https://api.thegraph.com/deploy/ riccardoesclapon/virtuals-subgraph",
+    "create-local": "graph create --node http://localhost:8020/ riccardoesclapon/virtuals-subgraph",
+    "remove-local": "graph remove --node http://localhost:8020/ riccardoesclapon/virtuals-subgraph",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 riccardoesclapon/virtuals-subgraph",
     "test": "graph test"
   },
   "dependencies": {
-    "@graphprotocol/graph-cli": "^0.94.0",
+    "@graphprotocol/graph-cli": "^0.95.0",
     "@graphprotocol/graph-ts": "^0.37.0"
   },
   "devDependencies": {
