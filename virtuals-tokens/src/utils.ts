@@ -8,6 +8,18 @@ export const ONE_BD = BigDecimal.fromString("1")
 export const BI_18 = BigInt.fromI32(18)
 export const SECONDS_PER_DAY = 24 * 60 * 60
 
+export function abs(num: BigDecimal): BigDecimal {
+  return num.lt(ZERO_BD) ? num.times(BigDecimal.fromString("-1")) : num
+}
+
+export function max(a: BigDecimal, b: BigDecimal): BigDecimal {
+  return a.gt(b) ? a : b
+}
+
+export function min(a: BigDecimal, b: BigDecimal): BigDecimal {
+  return a.lt(b) ? a : b
+}
+
 export function convertToDecimal(amount: BigInt, decimals: BigInt = BI_18): BigDecimal {
   let bd = BigDecimal.fromString("1")
   for (let i = ZERO_BI; i.lt(decimals); i = i.plus(ONE_BI)) {
@@ -22,21 +34,30 @@ export function getDayStartTimestamp(timestamp: BigInt): BigInt {
 }
 
 function toHexString(n: BigInt): string {
-  if (n.equals(ZERO_BI)) return '0'
+  if (n.equals(ZERO_BI)) {
+    let result = ''
+    for (let i = 0; i < 64; i++) {
+      result += '0'
+    }
+    return result
+  }
   
   const HEX_CHARS = '0123456789abcdef'
   let result = ''
   let value = n
+  let length = 0
   
+  // First pass: convert to hex and count length
   while (!value.equals(ZERO_BI)) {
     const remainder = value.mod(BigInt.fromI32(16)).toI32()
     result = HEX_CHARS.charAt(remainder) + result
     value = value.div(BigInt.fromI32(16))
+    length++
   }
   
-  // Pad to 64 characters
+  // Second pass: pad with zeros
   let padded = ''
-  for (let i = 0; i < 64 - result.length; i++) {
+  for (let i = 0; i < 64 - length; i++) {
     padded += '0'
   }
   return padded + result
@@ -117,6 +138,38 @@ export function loadOrCreateTokenDayStats(token: Bytes, timestamp: BigInt): Toke
     stats.buyRatio = ZERO_BD
     stats.averageHoldTime = ZERO_BI
     stats.traderRetention = ZERO_BD
+
+    // Initialize enhanced price analytics
+    stats.priceVolatility = ZERO_BD
+    stats.priceMovementCount = 0
+    stats.longestPriceUptrend = 0
+    stats.longestPriceDowntrend = 0
+    stats.averagePriceImpact = ZERO_BD
+    stats.volumeWeightedPrice = ZERO_BD
+
+    // Initialize enhanced volume analytics
+    stats.volumeDistribution = []
+    for (let i = 0; i < 10; i++) {
+      stats.volumeDistribution.push(ZERO_BD)
+    }
+    stats.largeTradeCount = 0
+    stats.buyVolumeRatio = ZERO_BD
+
+    // Initialize market health metrics
+    stats.liquidityScore = ZERO_BD
+    stats.marketEfficiency = ZERO_BD
+    stats.buyPressure = ZERO_BD
+    stats.marketDepth = ZERO_BD
+
+    // Initialize time-based analytics
+    stats.hourlyVolume = []
+    stats.hourlyTrades = []
+    for (let i = 0; i < 24; i++) {
+      stats.hourlyVolume.push(ZERO_BD)
+      stats.hourlyTrades.push(0)
+    }
+    stats.peakTradingHour = 0
+    stats.quietTradingHour = 0
   }
 
   return stats
@@ -145,6 +198,14 @@ export function loadOrCreateTokenTraderStats(
     stats.averageEntryPrice = ZERO_BD
     stats.averageExitPrice = ZERO_BD
     stats.holdTime = ZERO_BI
+
+    // Initialize enhanced trader analytics
+    stats.tradeFrequency = ZERO_BD
+    stats.profitabilityRatio = ZERO_BD
+    stats.averagePositionSize = ZERO_BD
+    stats.maxDrawdown = ZERO_BD
+    stats.winningStreak = 0
+    stats.losingStreak = 0
   }
 
   return stats
