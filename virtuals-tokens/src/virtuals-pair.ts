@@ -1,51 +1,82 @@
-import { BigDecimal, BigInt, Bytes } from "@graphprotocol/graph-ts"
+import { BigDecimal, BigInt, log, Address } from "@graphprotocol/graph-ts"
 import { Swap as SwapEvent } from "../generated/templates/VirtualsPair/VirtualsPair"
-import { Swap, SwapData } from "../generated/schema"
+import { VirtualsPair } from "../generated/templates/VirtualsPair/VirtualsPair"
+import { ERC20 } from "../generated/templates/ERC20/ERC20"
+import { Swap } from "../generated/schema"
+import {
+  convertTokenToDecimal,
+  updateTokenDayData,
+  ZERO_BD,
+  ZERO_BI,
+  exponentToBigDecimal
+} from "./utils"
 
-function convertToDecimal(amount: BigInt): BigDecimal {
-  return amount.toBigDecimal().div(BigDecimal.fromString("1000000000000000000")) // 18 decimals
+function getTokenDecimals(tokenAddress: Address): BigInt {
+  const token = ERC20.bind(tokenAddress)
+  const decimalsResult = token.try_decimals()
+  return decimalsResult.reverted ? BigInt.fromI32(18) : BigInt.fromI32(decimalsResult.value)
 }
 
 export function handleSwap(event: SwapEvent): void {
-  // Create legacy Swap entity
-  const id = event.transaction.hash.toHexString()
-  let swap = new Swap(id)
+  // Early validation
+  if (!event.transaction || !event.block || !event.address) {
+    return
+  }
 
+  // Create swap entity first to minimize memory usage
+  const swap = new Swap(event.transaction.hash)
   swap.timestamp = event.block.timestamp
   swap.block = event.block.number
   swap.trader = event.transaction.from
-
-  // Determine if it's a buy or sell based on which amount is non-zero
-  const isSell = event.params.amount0In.gt(BigInt.fromI32(0))
-  swap.type = isSell ? "SELL" : "BUY"
-  swap.amountIn = isSell ? event.params.amount0In : event.params.amount1In
-  swap.amountOut = isSell ? event.params.amount1Out : event.params.amount0Out
-
-  // These will be set by the Transfer event handler
-  swap.tokenIn = event.address
-  swap.tokenOut = event.address
-  swap.feeAmount = BigInt.fromI32(0)
+  swap.feeAmount = ZERO_BI
   swap.feeRecipient = event.address
 
+  // Determine swap type based on amounts
+  const isSell = event.params.amount0In.gt(ZERO_BI) && event.params.amount1Out.gt(ZERO_BI)
+  swap.type = isSell ? "SELL" : "BUY"
+
+  // Load pair contract and get token addresses
+  const pair = VirtualsPair.bind(event.address)
+  const token0Result = pair.try_tokenA()
+  const token1Result = pair.try_tokenB()
+
+  if (token0Result.reverted || token1Result.reverted) {
+    return
+  }
+
+  // Set token addresses and amounts
+  if (isSell) {
+    swap.tokenIn = token0Result.value
+    swap.tokenOut = token1Result.value
+    swap.amountIn = event.params.amount0In
+    swap.amountOut = event.params.amount1Out
+  } else {
+    swap.tokenIn = token1Result.value
+    swap.tokenOut = token0Result.value
+    swap.amountIn = event.params.amount1In
+    swap.amountOut = event.params.amount0Out
+  }
+
+  // Save basic swap data
   swap.save()
 
-  // Create new SwapData timeseries entity
-  // For timeseries entities with Int8 ID, we use a temporary ID that will be auto-incremented
-  let swapData = new SwapData("0")
-  
-  // Convert amounts to decimals
-  const amountToken = convertToDecimal(isSell ? event.params.amount0In : event.params.amount1In)
-  const amountUSD = convertToDecimal(isSell ? event.params.amount1Out : event.params.amount0Out)
+  // Calculate analytics values
+  const decimalsIn = getTokenDecimals(Address.fromBytes(swap.tokenIn))
+  const decimalsOut = getTokenDecimals(Address.fromBytes(swap.tokenOut))
 
-  swapData.token = event.address
-  swapData.amountToken = amountToken
-  swapData.amountUSD = amountUSD
-  swapData.type = isSell ? "SELL" : "BUY"
-  swapData.trader = event.transaction.from
-  swapData.isBuy = isSell ? 0 : 1
-  swapData.isSell = isSell ? 1 : 0
-  swapData.traderCount = 1
-  swapData.timestamp = event.block.timestamp.toI64()
+  const amountToken = convertTokenToDecimal(swap.amountIn, decimalsIn)
+  const amountUSD = convertTokenToDecimal(swap.amountOut, decimalsOut)
 
-  swapData.save()
+  if (!amountToken.equals(ZERO_BD) && !amountUSD.equals(ZERO_BD)) {
+    const priceUSD = amountUSD.div(amountToken)
+    updateTokenDayData(
+      swap.tokenIn,
+      event.block.timestamp,
+      priceUSD,
+      amountToken,
+      amountUSD,
+      swap.type,
+      event.transaction.from
+    )
+  }
 }

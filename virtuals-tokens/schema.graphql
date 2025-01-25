@@ -18,8 +18,8 @@ type TokenLaunch @entity {
   purchaseAmount: BigInt!
 }
 
-type Swap @entity {
-  id: ID! # Transaction hash
+type Swap @entity(immutable: true) {
+  id: Bytes! # Transaction hash
   timestamp: BigInt!
   block: BigInt!
   trader: Bytes!
@@ -32,40 +32,41 @@ type Swap @entity {
   type: String! # "BUY" or "SELL"
 }
 
-type SwapData @entity(timeseries: true) {
-  id: Int8!
-  timestamp: Timestamp!
-  token: Bytes!          # Token address
-  amountToken: BigDecimal!
-  amountUSD: BigDecimal!
-  type: String!         # "BUY" or "SELL"
-  trader: Bytes!
-  isBuy: Int! # 1 for buy, 0 for sell
-  isSell: Int! # 1 for sell, 0 for buy
-  traderCount: Int! # Always 1, used for counting unique traders
-}
-
-type TokenStats @aggregation(intervals: ["hour", "day"], source: "SwapData") {
-  id: Int8!
-  timestamp: Timestamp!
-  token: Bytes!
-  
-  # Volume metrics
-  volumeToken: BigDecimal! @aggregate(fn: "sum", arg: "amountToken")
-  volumeUSD: BigDecimal! @aggregate(fn: "sum", arg: "amountUSD")
+type TokenDayData @entity(immutable: true) {
+  id: Bytes!          # Concatenated token address and timestamp
+  token: Bytes!       # Token address
+  date: BigInt!       # Unix timestamp for start of day
   
   # Price metrics
-  priceUSD: BigDecimal! @aggregate(fn: "last", arg: "amountUSD / amountToken")
-  highPriceUSD: BigDecimal! @aggregate(fn: "max", arg: "amountUSD / amountToken")
-  lowPriceUSD: BigDecimal! @aggregate(fn: "min", arg: "amountUSD / amountToken")
+  priceUSD: BigDecimal!
+  priceUSDHigh: BigDecimal!
+  priceUSDLow: BigDecimal!
+  priceUSDChange: BigDecimal!
+  
+  # Volume metrics
+  volumeToken: BigDecimal!
+  volumeUSD: BigDecimal!
+  volumeUSDChange: BigDecimal! # 24h change
   
   # Trade metrics
-  tradeCount: Int! @aggregate(fn: "sum", arg: "traderCount")
-  buyCount: Int! @aggregate(fn: "sum", arg: "isBuy")
-  sellCount: Int! @aggregate(fn: "sum", arg: "isSell")
+  txCount: Int!
+  buyCount: Int!
+  sellCount: Int!
   
-  # Average trade size (total volume / trade count)
-  avgTradeSize: BigDecimal! @aggregate(fn: "sum", arg: "amountToken / traderCount")
+  # Unique metrics
+  uniqueTraders: Int!
+  
+  # Market metrics
+  marketCap: BigDecimal!
+  totalSupply: BigDecimal!
+  
+  # Liquidity metrics
+  tvlUSD: BigDecimal!
+  liquidityUSD: BigDecimal!
+}
+
+type TokenTraderDayData @entity(immutable: true) {
+  id: Bytes! # Concatenated token address, day timestamp, and trader address
 }
 
 type _Schema_
