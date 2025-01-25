@@ -1,36 +1,43 @@
 # Virtuals Protocol Token Launch Subgraph
 
-This subgraph indexes token launches from the Virtuals Protocol on Base network. It tracks both the Launched events and launch function calls from the contract at `0xF66DeA7b3e897cD44A5a231c61B6B4423d613259`.
+https://thegraph.com/explorer/subgraphs/FJ42AgdSR7rg9CTY7eUB7MPZbhmih4xKoXEUfh8oHroc
 
-## Latest Endpoint
+This subgraph indexes token launches and trading activity from the Virtuals Protocol on Base network. It tracks token launches, swaps, market statistics, and detailed trading analytics from the protocol contract at `0xF66DeA7b3e897cD44A5a231c61B6B4423d613259`.
 
-- Queries (HTTP): https://api.studio.thegraph.com/query/7428/virtuals-tokens/1.0.0
+## Features
+
+- Full-text search capabilities for tokens and descriptions
+- Non-fatal error handling for improved reliability
+- IPFS on Ethereum contracts support
+- Automatic data pruning
+- Comprehensive trading analytics and market statistics
 
 ## Schema
 
-The subgraph tracks the following data for each token launch:
+The subgraph tracks the following data:
 
-### Event Data
-- `address`: The launched token address (as string for searchability)
-- `addressBytes`: The raw token address bytes
-- `createdAtBlock`: Block number when the token was created
-- `createdAtTx`: Transaction hash of the creation
-- `tokenCreator`: Address of the token creator (as string for searchability)
-- `tokenCreatorBytes`: The raw creator address bytes
-- `timestamp`: Timestamp of the creation
+### Token Launch Data
+- Basic token information (address, creator, timestamp)
+- Token metadata (name, ticker, description, image)
+- Launch parameters (cores, purchase amount, URLs)
 
-### Launch Function Data
-- `name`: Token name
-- `ticker`: Token ticker symbol
-- `cores`: Array of core numbers
-- `description`: Token description
-- `imageUrl`: Token image URL
-- `urls`: Array of additional URLs
-- `purchaseAmount`: Purchase amount in wei
+### Trading Data
+- Swap events with detailed trade information
+- Token supply tracking
+- Trade snapshots for historical analysis
+- Comprehensive daily statistics
+- Per-trader analytics
+
+### Detailed Analytics
+- Price metrics (VWAP, volatility, trends)
+- Volume analysis (distribution, large trades)
+- Market health indicators (liquidity, efficiency)
+- Trader behavior (profitability, patterns)
+- Time-based analytics (hourly distributions)
 
 ## Example Queries
 
-### Get Recent Token Launches with Full Details
+### Get Recent Token Launches
 
 ```graphql
 {
@@ -54,59 +61,70 @@ The subgraph tracks the following data for each token launch:
 }
 ```
 
-### Search by Token Name or Description
+### Get Daily Trading Statistics
 
 ```graphql
 {
-  tokenLaunchSearch(
-    text: "AI"  # Search in name and description
+  tokenDayStats(
+    first: 10,
+    orderBy: volumeUSD,
+    orderDirection: desc
   ) {
-    id
-    name
-    ticker
-    description
-    address
-    tokenCreator
-    timestamp
+    token
+    date
+    openPrice
+    closePrice
+    volumeUSD
+    txCount
+    uniqueTraderCount
+    marketCap
+    priceVolatility
+    buyPressure
+    liquidityScore
   }
 }
 ```
 
-### Get Launches with Core Types
+### Get Trader Performance Analytics
 
 ```graphql
 {
-  tokenLaunches(
+  tokenTraderStats(
     where: {
-      cores_contains: [1, 2]  # Launches with specific core types
+      volumeUSD_gt: "1000"
     }
   ) {
-    name
-    ticker
-    cores
-    address
-    tokenCreator
-    timestamp
+    trader
+    token
+    date
+    txCount
+    volumeUSD
+    realizedPnL
+    profitabilityRatio
+    averagePositionSize
+    winningStreak
   }
 }
 ```
 
-### Get Launch Details by Transaction
+### Get Market Depth and Health Metrics
 
 ```graphql
 {
-  tokenLaunch(id: "0x...") {  # Replace with transaction hash
-    name
-    ticker
-    description
-    imageUrl
-    cores
-    urls
-    purchaseAmount
-    address
-    tokenCreator
-    createdAtBlock
-    timestamp
+  tokenDayStats(
+    where: {
+      token: "0x..."  # Replace with token address
+    }
+    orderBy: date,
+    orderDirection: desc
+  ) {
+    date
+    marketDepth
+    liquidityScore
+    marketEfficiency
+    buyPressure
+    volumeWeightedPrice
+    priceVolatility
   }
 }
 ```
@@ -170,8 +188,9 @@ graph deploy virtuals-tokens
 
 ## Notes
 
-- The subgraph starts indexing from block 21855685
-- Combines data from both Launched events and launch function calls
-- Addresses are stored both as strings (for search) and bytes (for raw data)
-- Supports fulltext search on addresses, names, tickers, and descriptions
-- Launch function parameters are captured and stored with the event data
+- The subgraph starts indexing from block 21841737
+- Features comprehensive trading analytics and market statistics
+- Supports fulltext search on token addresses, names, tickers, and descriptions
+- Includes detailed market health metrics and trader performance analytics
+- Tracks hourly and daily statistics for in-depth market analysis
+- Provides advanced analytics like price impact, market efficiency, and trader profitability
