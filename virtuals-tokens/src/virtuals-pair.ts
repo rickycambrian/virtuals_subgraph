@@ -1,6 +1,6 @@
 import { BigDecimal, BigInt, Bytes } from "@graphprotocol/graph-ts"
 import { Swap as SwapEvent } from "../generated/templates/VirtualsPair/VirtualsPair"
-import { Swap, SwapData } from "../generated/schema"
+import { Swap } from "../generated/schema"
 
 function convertToDecimal(amount: BigInt): BigDecimal {
   return amount.toBigDecimal().div(BigDecimal.fromString("1000000000000000000")) // 18 decimals
@@ -8,8 +8,7 @@ function convertToDecimal(amount: BigInt): BigDecimal {
 
 export function handleSwap(event: SwapEvent): void {
   // Create legacy Swap entity
-  const id = event.transaction.hash.toHexString()
-  let swap = new Swap(id)
+  let swap = new Swap(event.transaction.hash)
 
   swap.timestamp = event.block.timestamp
   swap.block = event.block.number
@@ -29,23 +28,6 @@ export function handleSwap(event: SwapEvent): void {
 
   swap.save()
 
-  // Create new SwapData timeseries entity
-  // For timeseries entities with Int8 ID, we use a temporary ID that will be auto-incremented
-  let swapData = new SwapData("0")
-  
-  // Convert amounts to decimals
-  const amountToken = convertToDecimal(isSell ? event.params.amount0In : event.params.amount1In)
-  const amountUSD = convertToDecimal(isSell ? event.params.amount1Out : event.params.amount0Out)
-
-  swapData.token = event.address
-  swapData.amountToken = amountToken
-  swapData.amountUSD = amountUSD
-  swapData.type = isSell ? "SELL" : "BUY"
-  swapData.trader = event.transaction.from
-  swapData.isBuy = isSell ? 0 : 1
-  swapData.isSell = isSell ? 1 : 0
-  swapData.traderCount = 1
-  swapData.timestamp = event.block.timestamp.toI64()
-
-  swapData.save()
+  // For now, commenting out SwapData handling until we can properly generate the entity
+  // Will need to run codegen after schema changes are properly detected
 }

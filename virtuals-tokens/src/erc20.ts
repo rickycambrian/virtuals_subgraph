@@ -5,8 +5,7 @@ import { Swap } from "../generated/schema"
 const FEE_RECIPIENT = "0x9883A9f1284A1F0187401195DC1309F6cC167147"
 
 export function handleTransfer(event: TransferEvent): void {
-  const id = event.transaction.hash.toHexString()
-  let swap = Swap.load(id)
+  let swap = Swap.load(event.transaction.hash)
 
   if (swap) {
     // If this is a fee transfer (to the fee recipient)
@@ -24,6 +23,6 @@ export function handleTransfer(event: TransferEvent): void {
     }
 
     swap.save()
-    log.info('Updated Swap entity with Transfer info. ID: {}', [id])
+    log.info('Updated Swap entity with Transfer info. ID: {}', [event.transaction.hash.toHexString()])
   }
 }

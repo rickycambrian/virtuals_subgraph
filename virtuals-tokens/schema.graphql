@@ -19,7 +19,7 @@ type TokenLaunch @entity {
 }
 
 type Swap @entity {
-  id: ID! # Transaction hash
+  id: Bytes! # Transaction hash
   timestamp: BigInt!
   block: BigInt!
   trader: Bytes!
