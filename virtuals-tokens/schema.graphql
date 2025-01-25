@@ -18,7 +18,7 @@ type TokenLaunch @entity {
   purchaseAmount: BigInt!
 }
 
-type Swap @entity {
+type Swap @entity(immutable: true) {
   id: Bytes! # Transaction hash
   timestamp: BigInt!
   block: BigInt!
@@ -32,40 +32,122 @@ type Swap @entity {
   type: String! # "BUY" or "SELL"
 }
 
-type SwapData @entity(timeseries: true) {
-  id: Int8!
-  timestamp: Timestamp!
-  token: Bytes!          # Token address
-  amountToken: BigDecimal!
-  amountUSD: BigDecimal!
-  type: String!         # "BUY" or "SELL"
-  trader: Bytes!
-  isBuy: Int! # 1 for buy, 0 for sell
-  isSell: Int! # 1 for sell, 0 for buy
-  traderCount: Int! # Always 1, used for counting unique traders
+type TokenSupply @entity {
+  id: Bytes!          # Token address
+  circulatingSupply: BigDecimal!
+  lastUpdateBlock: BigInt!
+  lastUpdateTimestamp: BigInt!
 }
 
-type TokenStats @aggregation(intervals: ["hour", "day"], source: "SwapData") {
-  id: Int8!
-  timestamp: Timestamp!
+type TradeSnapshot @entity(immutable: true) {
+  id: Bytes!          # Concatenated token address, timestamp, and tx hash
   token: Bytes!
+  timestamp: BigInt!
+  transaction: Bytes!
+  trader: Bytes!
   
-  # Volume metrics
-  volumeToken: BigDecimal! @aggregate(fn: "sum", arg: "amountToken")
-  volumeUSD: BigDecimal! @aggregate(fn: "sum", arg: "amountUSD")
+  # Trade data
+  type: String!      # "BUY" or "SELL"
+  volumeToken: BigDecimal!
+  volumeUSD: BigDecimal!
+  priceUSD: BigDecimal!
+  
+  # Market state at time of trade
+  marketCap: BigDecimal!
+  circulatingSupply: BigDecimal!
+}
+
+type TokenDayStats @entity {
+  id: Bytes!          # Concatenated token address and day timestamp
+  token: Bytes!
+  date: BigInt!
   
   # Price metrics
-  priceUSD: BigDecimal! @aggregate(fn: "last", arg: "amountUSD / amountToken")
-  highPriceUSD: BigDecimal! @aggregate(fn: "max", arg: "amountUSD / amountToken")
-  lowPriceUSD: BigDecimal! @aggregate(fn: "min", arg: "amountUSD / amountToken")
+  openPrice: BigDecimal!
+  closePrice: BigDecimal!
+  highPrice: BigDecimal!
+  lowPrice: BigDecimal!
+  priceChange: BigDecimal! # Percentage change from previous day
+  
+  # Volume metrics
+  volumeToken: BigDecimal!
+  volumeUSD: BigDecimal!
+  volumeChange: BigDecimal! # 24h change
   
   # Trade metrics
-  tradeCount: Int! @aggregate(fn: "sum", arg: "traderCount")
-  buyCount: Int! @aggregate(fn: "sum", arg: "isBuy")
-  sellCount: Int! @aggregate(fn: "sum", arg: "isSell")
+  txCount: Int!
+  buyCount: Int!
+  sellCount: Int!
+  uniqueTraderCount: Int!
+  uniqueTraders: [Bytes!]!
   
-  # Average trade size (total volume / trade count)
-  avgTradeSize: BigDecimal! @aggregate(fn: "sum", arg: "amountToken / traderCount")
+  # Market metrics
+  marketCap: BigDecimal!
+  circulatingSupply: BigDecimal!
+  
+  # Additional metrics
+  averageTradeSize: BigDecimal!
+  largestTrade: BigDecimal!
+  smallestTrade: BigDecimal!
+  volatility: BigDecimal!     # Standard deviation of price changes
+  buyRatio: BigDecimal!       # buyCount / txCount
+  averageHoldTime: BigInt!    # Average time between buys and sells
+  traderRetention: BigDecimal! # Returning traders / total traders
+  
+  # Enhanced price analytics
+  priceVolatility: BigDecimal!      # Standard deviation of price changes within the day
+  priceMovementCount: Int!          # Number of price direction changes
+  longestPriceUptrend: Int!         # Longest consecutive price increase streak
+  longestPriceDowntrend: Int!       # Longest consecutive price decrease streak
+  averagePriceImpact: BigDecimal!   # Average price change per trade
+  volumeWeightedPrice: BigDecimal!   # VWAP for more accurate price representation
+  
+  # Enhanced volume analytics
+  volumeDistribution: [BigDecimal!]! # Distribution of trade sizes in percentiles (10 values for deciles)
+  largeTradeCount: Int!             # Number of trades above average size
+  buyVolumeRatio: BigDecimal!       # Buy volume / total volume
+  
+  # Market health metrics
+  liquidityScore: BigDecimal!       # Based on trade size impact on price
+  marketEfficiency: BigDecimal!     # Price consistency across trades
+  buyPressure: BigDecimal!          # Buy volume vs sell volume trend
+  marketDepth: BigDecimal!          # Average trade size possible without significant price impact
+  
+  # Time-based analytics
+  hourlyVolume: [BigDecimal!]!      # Volume distribution by hour (24 values)
+  hourlyTrades: [Int!]!             # Trade count distribution by hour (24 values)
+  peakTradingHour: Int!             # Hour with highest volume
+  quietTradingHour: Int!            # Hour with lowest volume
+}
+
+type TokenTraderStats @entity {
+  id: Bytes! # Concatenated token address, day timestamp, and trader address
+  token: Bytes!
+  trader: Bytes!
+  date: BigInt!
+  
+  # Trading activity
+  txCount: Int!
+  volumeToken: BigDecimal!
+  volumeUSD: BigDecimal!
+  
+  # Trade types
+  buyCount: Int!
+  sellCount: Int!
+  
+  # Profitability metrics
+  realizedPnL: BigDecimal!          # Realized profit/loss in USD
+  averageEntryPrice: BigDecimal!
+  averageExitPrice: BigDecimal!
+  holdTime: BigInt!                 # Time between first and last trade of the day
+  
+  # Enhanced trader analytics
+  tradeFrequency: BigDecimal!       # Average time between trades
+  profitabilityRatio: BigDecimal!   # Profitable trades / total trades
+  averagePositionSize: BigDecimal!  # Average amount per trade
+  maxDrawdown: BigDecimal!          # Largest peak-to-trough decline
+  winningStreak: Int!               # Longest streak of profitable trades
+  losingStreak: Int!                # Longest streak of unprofitable trades
 }
 
 type _Schema_
